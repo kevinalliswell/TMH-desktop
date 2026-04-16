@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 ## [Unreleased]
 
+## [1.1.260416] - 2026-04-16
+
 ### Added
 
 - Release preparation script to synchronize `configs/software.info` with `CHANGELOG.md`.

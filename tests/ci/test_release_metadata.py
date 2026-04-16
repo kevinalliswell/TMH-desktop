@@ -2,7 +2,11 @@ import json
 from pathlib import Path
 
 from build_release import TMHBuilder
-from scripts.release_manager import prepare_release, verify_release_metadata
+from scripts.release_manager import (
+    get_release_section,
+    prepare_release,
+    verify_release_metadata,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -29,10 +33,11 @@ def test_builder_uses_current_configured_version():
 
 
 def test_version_metadata_is_consistent():
+    info = json.loads(SOFTWARE_INFO_PATH.read_text(encoding="utf-8"))
     result = verify_release_metadata()
 
-    assert result["version"] == "1.1.251121"
-    assert result["tag"] == "v1.1.251121"
+    assert result["version"] == info["version"]
+    assert result["tag"] == f"v{info['version']}"
 
 
 def test_prepare_release_moves_unreleased_section(tmp_path):
@@ -75,3 +80,13 @@ def test_prepare_release_moves_unreleased_section(tmp_path):
     assert "## [1.1.251122] - 2025-11-22" in changelog
     assert "- Add new release command." in changelog
     assert changelog.index("## [Unreleased]") < changelog.index("## [1.1.251122] - 2025-11-22")
+
+
+def test_can_extract_release_section_for_notes():
+    changelog = CHANGELOG_PATH.read_text(encoding="utf-8")
+    section = get_release_section(changelog, "1.1.251121")
+
+    assert section is not None
+    assert section.version == "1.1.251121"
+    assert section.release_date == "2025-11-21"
+    assert "统一使用 `tmh_comm` 协议包" in section.body

@@ -75,15 +75,26 @@ jobs:
       - validate-tag
       - build-windows
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
       - name: Download packaged artifacts
         uses: actions/download-artifact@v8
         with:
           name: release-assets
           path: release-assets
 
+      - name: Generate release notes from changelog
+        run: python scripts/release_manager.py notes --version "${{ needs.validate-tag.outputs.version }}" --output release-notes.md
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.validate-tag.outputs.tag }}
-          generate_release_notes: true
+          body_path: release-notes.md
           files: release-assets/**/*

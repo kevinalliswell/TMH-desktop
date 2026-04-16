@@ -73,6 +73,22 @@ def get_first_release_section(changelog_text: str) -> ReleaseSection | None:
     )
 
 
+def get_release_section(changelog_text: str, version: str) -> ReleaseSection | None:
+    headings = list(RELEASE_HEADING_PATTERN.finditer(changelog_text))
+    for index, match in enumerate(headings):
+        if match.group("version") != version:
+            continue
+        body_start = match.end()
+        body_end = headings[index + 1].start() if index + 1 < len(headings) else len(changelog_text)
+        body = changelog_text[body_start:body_end].strip()
+        return ReleaseSection(
+            version=match.group("version"),
+            release_date=match.group("release_date"),
+            body=body,
+        )
+    return None
+
+
 def split_unreleased_section(changelog_text: str) -> tuple[str, str, str]:
     marker = "## [Unreleased]"
     start = changelog_text.find(marker)
@@ -223,6 +239,26 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_notes(args: argparse.Namespace) -> int:
+    try:
+        metadata = verify_release_metadata()
+        version = args.version or metadata["version"]
+        validate_version(version)
+        section = get_release_section(load_changelog(), version)
+        if section is None:
+            raise ValueError(f"CHANGELOG.md does not contain a release entry for {version}.")
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    notes = f"## {section.version} ({section.release_date})\n\n{section.body}".strip() + "\n"
+    if args.output:
+        Path(args.output).write_text(notes, encoding="utf-8")
+    else:
+        print(notes)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Manage TMH release metadata and keep software.info plus CHANGELOG in sync."
@@ -251,6 +287,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Preview changes without writing files.",
     )
     prepare_parser.set_defaults(func=cmd_prepare)
+
+    notes_parser = subparsers.add_parser(
+        "notes",
+        help="Export the release notes for a released version from CHANGELOG.md.",
+    )
+    notes_parser.add_argument(
+        "--version",
+        help="Released version to export. Defaults to configs/software.info.",
+    )
+    notes_parser.add_argument(
+        "--output",
+        help="Optional file path to write the release notes to.",
+    )
+    notes_parser.set_defaults(func=cmd_notes)
 
     return parser
 
