@@ -378,7 +378,7 @@ docs/
 ### 1. 仓库备份
 ```bash
 # 创建完整备份
-git clone --mirror https://github.com/kevinalliswell/TMH.git TMH-backup.git
+git clone --mirror https://github.com/kevinalliswell/TMH-desktop.git TMH-desktop-backup.git
 
 # 创建特定分支备份
 git archive --format=zip --output=backup.zip HEAD
@@ -532,7 +532,7 @@ git checkout <commit-id> -- <filename>
 
 ## 联系信息
 
-- **仓库地址**: https://github.com/kevinalliswell/TMH
+- **仓库地址**: https://github.com/kevinalliswell/TMH-desktop
 - **项目维护者**: kevinalliswell
 - **邮箱**: kevin.alliswell@gmail.com
 - **技术支持**: shijinpeng06@126.com

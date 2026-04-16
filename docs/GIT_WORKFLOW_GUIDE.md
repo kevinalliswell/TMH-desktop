@@ -37,7 +37,7 @@ git config --global core.autocrlf true
 
 ### 2. 克隆仓库
 ```bash
-git clone https://github.com/kevinalliswell/TMH.git
+git clone https://github.com/kevinalliswell/TMH-desktop.git
 cd TMH
 ```
 
@@ -255,7 +255,7 @@ git rebase main  # 或使用 git merge main
 ### 1. 创建备份
 ```bash
 # 备份整个仓库
-git clone --mirror https://github.com/kevinalliswell/TMH.git TMH-backup.git
+git clone --mirror https://github.com/kevinalliswell/TMH-desktop.git TMH-desktop-backup.git
 
 # 备份特定分支
 git archive --format=zip --output=backup.zip HEAD
@@ -326,7 +326,7 @@ git remote prune origin
 
 ## 联系信息
 
-- **仓库地址**: https://github.com/kevinalliswell/TMH
+- **仓库地址**: https://github.com/kevinalliswell/TMH-desktop
 - **维护者**: kevinalliswell
 - **邮箱**: kevin.alliswell@gmail.com
 

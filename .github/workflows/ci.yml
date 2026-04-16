@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/**"
+      - "bugfix/**"
+      - "hotfix/**"
+      - "release/**"
+    tags-ignore:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ci
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            packages/tmh_comm/pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt ./packages/tmh_comm
+
+      - name: Validate application version metadata
+        run: python scripts/app_version.py --validate
+
+      - name: Compile Python sources
+        run: python -m compileall src packages/tmh_comm/src scripts tests/ci
+
+      - name: Run smoke tests
+        run: pytest --junitxml=.pytest-results/junit.xml
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: .pytest-results/junit.xml
+          if-no-files-found: ignore

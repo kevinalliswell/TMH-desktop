@@ -1,7 +1,8 @@
 # TMH-LPF-900 铁矿石冶金性能综合检测与控制系统
 
-[![版本](https://img.shields.io/badge/版本-1.1.251121-blue.svg)](https://github.com/kevinalliswell/TMH/releases)
-[![Python](https://img.shields.io/badge/Python-3.8%2B-green.svg)](https://www.python.org/)
+[![CI](https://img.shields.io/github/actions/workflow/status/kevinalliswell/TMH-desktop/ci.yml?branch=main&label=CI)](https://github.com/kevinalliswell/TMH-desktop/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kevinalliswell/TMH-desktop?display_name=tag)](https://github.com/kevinalliswell/TMH-desktop/releases)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/UI-PySide6-41CD52.svg)](https://doc.qt.io/qtforpython/)
 
 ## 项目简介
@@ -49,7 +50,7 @@ TMH-LPF-900
 | 项目 | 最低要求 | 推荐配置 |
 |------|---------|---------|
 | 操作系统 | Windows 10 | Windows 11 |
-| Python | 3.8+ | 3.10+ |
+| Python | 3.10+ | 3.12 |
 | 内存 | 4 GB | 8 GB |
 | 硬盘空间 | 2 GB | 10 GB |
 | 串口 | 2 个 | 3 个以上 |
@@ -61,14 +62,14 @@ TMH-LPF-900
 
 ```bash
 # 克隆仓库
-git clone https://github.com/kevinalliswell/TMH.git
-cd TMH
+git clone https://github.com/kevinalliswell/TMH-desktop.git
+cd TMH-desktop
 
 # 安装依赖
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # 安装本地协议包
-pip install -e packages/tmh_comm
+python -m pip install ./packages/tmh_comm
 
 # 运行应用程序
 python src/app.py
@@ -216,11 +217,10 @@ python -m venv .venv
 # source .venv/bin/activate   # Linux/macOS
 
 # 安装依赖
-pip install -r requirements.txt
-pip install -e packages/tmh_comm
+python -m pip install -r requirements-dev.txt ./packages/tmh_comm
 
 # 运行测试
-python -m pytest tests/
+pytest
 ```
 
 ### 关键依赖
@@ -232,6 +232,12 @@ python -m pytest tests/
 | pyserial | 串口通信 |
 | pymodbus | Modbus 协议 |
 | psutil | 系统性能监控 |
+
+## GitHub 协作
+
+- 开发规范见 `CONTRIBUTING.md`
+- 仓库设置检查清单见 `docs/GITHUB_SETUP_CHECKLIST.md`
+- 版本号以 `configs/software.info` 为准，发布标签格式为 `v<version>`
 
 ## 版本历史
 
