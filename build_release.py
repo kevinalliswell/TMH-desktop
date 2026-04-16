@@ -16,6 +16,25 @@ import zipfile
 import json
 from datetime import datetime
 
+
+def _configure_utf8_stdio() -> None:
+    """Prefer UTF-8 console output so GitHub Windows runners can print Chinese logs."""
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except Exception:
+            pass
+
+
+_configure_utf8_stdio()
+
+
 class TMHBuilder:
     def __init__(self):
         self.project_root = Path(__file__).parent.absolute()
