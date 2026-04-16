@@ -50,7 +50,7 @@ jobs:
           python -m pip install -r requirements-dev.txt ./packages/tmh_comm
 
       - name: Validate application version metadata
-        run: python scripts/app_version.py --validate
+        run: python scripts/release_manager.py verify
 
       - name: Compile Python sources
         run: python -m compileall src packages/tmh_comm/src scripts tests/ci

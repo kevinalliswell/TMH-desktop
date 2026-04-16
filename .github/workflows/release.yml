@@ -32,7 +32,7 @@ jobs:
         id: version
         run: |
           python scripts/app_version.py --github-output
-          python scripts/app_version.py --validate --check-tag "${GITHUB_REF_NAME}"
+          python scripts/release_manager.py verify --check-tag "${GITHUB_REF_NAME}"
 
   build-windows:
     name: build-windows

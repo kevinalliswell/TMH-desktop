@@ -52,12 +52,13 @@ Examples:
 - Git tags must use the form `v<version>`, for example `v1.1.251121`.
 - Update `CHANGELOG.md` before creating a release tag.
 - Only tag commits that are already on `main`.
+- Use `python scripts/release_manager.py verify` to check version consistency locally.
 
 ## Release Flow
 
 1. Merge validated changes into `develop`.
 2. Create `release/*` if stabilization is needed, otherwise open a PR from `develop` to `main`.
-3. Confirm `configs/software.info` and `CHANGELOG.md` are up to date.
+3. Run `python scripts/release_manager.py prepare --version <new-version> --date <yyyy-mm-dd>`.
 4. Tag the `main` commit with `v<version>`.
 5. Push the tag to trigger the GitHub Release workflow.
 
@@ -66,4 +67,3 @@ Examples:
 - `pytest` is intentionally scoped to `tests/ci` for a stable automation baseline.
 - Hardware, exploratory UI, and legacy scripts remain under `tests/` and should be run explicitly when relevant.
 - Any change that touches serial communication, experiment persistence, or release packaging should include at least one automation-safe smoke test when possible.
-

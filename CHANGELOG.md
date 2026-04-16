@@ -8,16 +8,12 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 ### Added
 
-- GitHub Actions CI workflow with smoke-test coverage for repository health checks.
-- Tag-driven GitHub Release workflow for Windows packaging and asset publishing.
-- GitHub issue forms, pull request template, CODEOWNERS, Dependabot, and release-note categories.
-- Stable `tests/ci` smoke suite and version validation script for automation.
+- Release preparation script to synchronize `configs/software.info` with `CHANGELOG.md`.
 
 ### Changed
 
-- Standardized repository workflow around `main`, `develop`, feature, bugfix, hotfix, and release branches.
-- Updated developer setup instructions to install the local `tmh_comm` package using a build-compatible path install.
-- Clarified the active Python baseline for automated validation.
+- CI and Release workflows now verify full version consistency instead of only checking the raw version string.
+- README no longer duplicates release history; `CHANGELOG.md` is now the single release-history document.
 
 ## [1.1.251121] - 2025-11-21
 
@@ -25,4 +21,3 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 - 重构通信设置页面：控件引用集中管理、信号连接分离、串口刷新、恢复默认、脏状态跟踪。
 - 优化设备客户端：移除冗余协议文件，统一使用 `tmh_comm` 协议包。
-
