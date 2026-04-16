@@ -1,0 +1,10 @@
+{
+    "heartbeat_timeout": 10.0,
+    "max_response_time": 5.0,
+    "error_threshold": 5,
+    "reconnect_attempts": 3,
+    "reconnect_delay": 2.0,
+    "data_quality_threshold": 0.8,
+    "enable_auto_recovery": true,
+    "alert_cooldown": 30.0
+}

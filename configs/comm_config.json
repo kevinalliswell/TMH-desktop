@@ -1,0 +1,65 @@
+{
+    "COM_RS485_MFC": {
+        "port": "COM12",
+        "baudrate": 9600,
+        "bytesize": 8,
+        "parity": "E",
+        "stopbits": 1,
+        "timeout": 0.5
+    },
+    "COM_RS485_TEMP": {
+        "port": "COM10",
+        "baudrate": 9600,
+        "bytesize": 8,
+        "parity": "N",
+        "stopbits": 1,
+        "timeout": 1.0,
+        "slave_address": 0,
+        "start_reg": 0,
+        "reg_count": 9,
+        "TEMP_CHANNELS": [
+            "T1",
+            "T2",
+            "T3",
+            "T4",
+            "T5",
+            "T6",
+            "T7",
+            "T8",
+            "T9"
+        ],
+        "scale": 0.1,
+        "signed_registers": false
+    },
+    "COM_RS232_Balance": {
+        "port": "COM15",
+        "baudrate": 1200,
+        "bytesize": 8,
+        "parity": "N",
+        "stopbits": 1,
+        "timeout": 1.0
+    },
+    "SAMPLING": {
+        "interval_s": 1.0
+    },
+    "PERFORMANCE_CONFIG": {
+        "data_collection_interval": 0.2,
+        "experiment_data_interval": 1.0,
+        "heartbeat_timeout": 5.0
+    },
+    "SLAVE_ADDRESS_MFC": {
+        "H2": 1,
+        "N2": 2,
+        "CO2": 3,
+        "CO": 4
+    },
+    "SLAVE_ADDRESS_TEMP": {
+        "TEMP": 0
+    },
+    "FLOW_SCALING": {
+        "H2": 0.1,
+        "N2": 1.0,
+        "CO2": 0.1,
+        "CO": 0.1
+    }
+}

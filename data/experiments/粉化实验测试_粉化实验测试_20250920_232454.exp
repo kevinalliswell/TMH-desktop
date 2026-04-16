@@ -1,0 +1,27 @@
+{
+    "version": "1.0",
+    "format": "TMH_Experiment",
+    "created_at": "2025-09-20T23:24:54.446372",
+    "data": {
+        "experiment_id": "972cbd66-70a2-47fd-971e-11fdc6564ae8",
+        "experiment_name": "粉化实验测试",
+        "sample_name": "粉化实验测试",
+        "sample_weight": 523.0,
+        "start_time": "2025-09-20T23:24:54.445758",
+        "end_time": null,
+        "description": "粉化实验测试",
+        "operator": "kevin",
+        "experiment_type": "GB/T 13242-2017 铁矿石低温粉化试验方法",
+        "analysis_results_json": null,
+        "timestamps": [],
+        "temperatures": [],
+        "weights": [],
+        "weight_losses": [],
+        "gas_flows": {
+            "CO": [],
+            "CO2": [],
+            "N2": [],
+            "H2": []
+        }
+    }
+}

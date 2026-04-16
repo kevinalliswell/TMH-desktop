@@ -1,0 +1,27 @@
+{
+    "version": "1.0",
+    "format": "TMH_Experiment",
+    "created_at": "2025-09-17T15:47:17.260309",
+    "data": {
+        "experiment_id": "9dacdf8e-1ab8-4587-90e2-2e01afe7e82f",
+        "experiment_name": "莱钢",
+        "sample_name": "酸性球团矿",
+        "sample_weight": 506.0,
+        "start_time": "2025-09-17T15:47:17.260051",
+        "end_time": null,
+        "description": "无",
+        "operator": "kevin",
+        "experiment_type": "自定义_GB/T 13242-2017 铁矿石低温粉化试验方法",
+        "analysis_results_json": null,
+        "timestamps": [],
+        "temperatures": [],
+        "weights": [],
+        "weight_losses": [],
+        "gas_flows": {
+            "CO": [],
+            "CO2": [],
+            "N2": [],
+            "H2": []
+        }
+    }
+}

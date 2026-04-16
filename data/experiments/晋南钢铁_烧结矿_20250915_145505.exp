@@ -1,0 +1,27 @@
+{
+    "version": "1.0",
+    "format": "TMH_Experiment",
+    "created_at": "2025-09-15T14:55:05.793966",
+    "data": {
+        "experiment_id": "2eff2adb-8aff-42e1-b381-6e70b4255c42",
+        "experiment_name": "晋南钢铁",
+        "sample_name": "烧结矿",
+        "sample_weight": 518.0,
+        "start_time": "2025-09-15T14:55:05.793705",
+        "end_time": null,
+        "description": "无",
+        "operator": "kevin",
+        "experiment_type": "高温长时还原试验",
+        "analysis_results_json": null,
+        "timestamps": [],
+        "temperatures": [],
+        "weights": [],
+        "weight_losses": [],
+        "gas_flows": {
+            "CO": [],
+            "CO2": [],
+            "N2": [],
+            "H2": []
+        }
+    }
+}

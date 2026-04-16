@@ -1,0 +1,27 @@
+{
+    "version": "1.0",
+    "format": "TMH_Experiment",
+    "created_at": "2025-09-14T17:17:19.723076",
+    "data": {
+        "experiment_id": "2ecf9c04-0ad1-462e-8182-b95ee3b1eafc",
+        "experiment_name": "test-0914-3",
+        "sample_name": "test-0914-3",
+        "sample_weight": 512.0,
+        "start_time": "2025-09-14T17:17:19.722641",
+        "end_time": null,
+        "description": "test-0914-3",
+        "operator": "kevin",
+        "experiment_type": "test",
+        "analysis_results_json": null,
+        "timestamps": [],
+        "temperatures": [],
+        "weights": [],
+        "weight_losses": [],
+        "gas_flows": {
+            "CO": [],
+            "CO2": [],
+            "N2": [],
+            "H2": []
+        }
+    }
+}

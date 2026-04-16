@@ -1,0 +1,26 @@
+{
+    "port": "COM10",
+    "baudrate": 9600,
+    "parity": "E",
+    "stopbits": 1,
+    "bytesize": 8,
+    "timeout": 1.5,
+    "SLAVE_ADDRESS_MFC": {
+        "H2": 1,
+        "N2": 2,
+        "CO2": 3,
+        "CO": 4
+    },
+    "FLOW_SCALING": {
+        "H2": 0.1,
+        "N2": 1.0,
+        "CO2": 0.1,
+        "CO": 0.1
+    },
+    "test_settings": {
+        "read_iterations": 20,
+        "write_iterations": 10,
+        "concurrent_duration": 15,
+        "gases": ["N2", "CO", "CO2", "H2"]
+    }
+}

@@ -1,0 +1,27 @@
+{
+    "version": "1.0",
+    "format": "TMH_Experiment",
+    "created_at": "2025-09-15T15:26:09.820114",
+    "data": {
+        "experiment_id": "d283a76e-028d-485c-978b-546bc90360b1",
+        "experiment_name": "晋南钢铁",
+        "sample_name": "球团矿",
+        "sample_weight": 518.0,
+        "start_time": "2025-09-15T15:26:09.819843",
+        "end_time": null,
+        "description": "无",
+        "operator": "kevin",
+        "experiment_type": "自定义_GB/T 13242-2017 铁矿石低温粉化试验方法",
+        "analysis_results_json": null,
+        "timestamps": [],
+        "temperatures": [],
+        "weights": [],
+        "weight_losses": [],
+        "gas_flows": {
+            "CO": [],
+            "CO2": [],
+            "N2": [],
+            "H2": []
+        }
+    }
+}

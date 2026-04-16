@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>铁矿石还原性实验检测报告</title>
+    <style>
+        body {
+            font-family: "SimSun", "宋体", serif;
+            line-height: 1.5;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            width: 21cm;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 20px;
+        }
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .subtitle {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        .report-info {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .report-info td {
+            padding: 8px;
+            border: 1px solid #000;
+        }
+        .report-info .label {
+            font-weight: bold;
+            width: 30%;
+            background-color: #f2f2f2;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 20px 0 10px 0;
+            border-bottom: 1px solid #000;
+            padding-bottom: 5px;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .data-table th, .data-table td {
+            padding: 8px;
+            border: 1px solid #000;
+            text-align: center;
+        }
+        .data-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .footnote {
+            font-size: 12px;
+            margin-top: 50px;
+            border-top: 1px solid #000;
+            padding-top: 10px;
+        }
+        .signature {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .signature-item {
+            width: 45%;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            border: 1px solid #000;
+            margin: 20px 0;
+            position: relative;
+        }
+        .chart-container::before {
+            content: "[还原曲线图位置 - Reduction Curve Chart]";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">铁矿石还原性实验检测报告</div>
+            <div class="subtitle">Iron Ore Reducibility Test Report</div>
+            <div class="subtitle">（参照GB/T 13241-2017）</div>
+        </div>
+
+        <table class="report-info">
+            <tr>
+                <td class="label">报告编号 Report No.</td>
+                <td>{{ report_info.report_no }}</td>
+                <td class="label">测试日期 Test Date</td>
+                <td>{{ test_date }}</td>
+            </tr>
+            <tr>
+                <td class="label">委托单位 Client</td>
+                <td colspan="3">{{ report_info.client }}</td>
+            </tr>
+            <tr>
+                <td class="label">样品名称 Sample Name</td>
+                <td>{{ report_info.sample_name }}</td>
+                <td class="label">样品编号 Sample No.</td>
+                <td>{{ report_info.sample_no }}</td>
+            </tr>
+            <tr>
+                <td class="label">来样日期 Receiving Date</td>
+                <td>{{ report_info.receiving_date }}</td>
+                <td class="label">报告日期 Report Date</td>
+                <td>{{ report_info.report_date }}</td>
+            </tr>
+            <tr>
+                <td class="label">样品状态 Sample Status</td>
+                <td colspan="3">{{ report_info.sample_status }}</td>
+            </tr>
+        </table>
+
+        <div class="section-title">1. 测试仪器与设备 Testing Equipment</div>
+        <table class="data-table">
+            <tr>
+                <th>序号 No.</th>
+                <th>设备名称 Equipment Name</th>
+                <th>型号 Model</th>
+                <th>精度 Precision</th>
+                <th>设备编号 Equipment No.</th>
+            </tr>
+            {% for item in equipment %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ item.name }}</td>
+                <td>{{ item.model }}</td>
+                <td>{{ item.precision }}</td>
+                <td>{{ item.equipment_no }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <div class="section-title">2. 试样化学成分 Sample Chemical Composition</div>
+        <table class="data-table">
+            <tr>
+                <th>TFe(%)</th>
+                <th>FeO(%)</th>
+                <th>SiO₂(%)</th>
+                <th>Al₂O₃(%)</th>
+                <th>CaO(%)</th>
+                <th>MgO(%)</th>
+                <th>灼减 LOI(%)</th>
+            </tr>
+            <tr>
+                <td>{{ chemical_composition.TFe }}</td>
+                <td>{{ chemical_composition.FeO }}</td>
+                <td>{{ chemical_composition.SiO2 }}</td>
+                <td>{{ chemical_composition.Al2O3 }}</td>
+                <td>{{ chemical_composition.CaO }}</td>
+                <td>{{ chemical_composition.MgO }}</td>
+                <td>{{ chemical_composition.LOI }}</td>
+            </tr>
+        </table>
+
+        <div class="section-title">3. 测试条件 Test Conditions</div>
+        <table class="data-table">
+            <tr>
+                <th>参数 Parameter</th>
+                <th>标准值 Standard Value</th>
+                <th>实际值 Actual Value</th>
+            </tr>
+            {% for item in test_conditions %}
+            <tr>
+                <td>{{ item.parameter }}</td>
+                <td>{{ item.standard_value }}</td>
+                <td>{{ item.actual_value }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <div class="section-title">4. 测试结果 Test Results</div>
+        
+        <div class="chart-container"></div>
+        
+        <table class="data-table">
+            <tr>
+                <th rowspan="2">测试编号<br>Test No.</th>
+                <th rowspan="2">试验前质量<br>Mass Before<br>Test(g)</th>
+                <th rowspan="2">试验后质量<br>Mass After<br>Test(g)</th>
+                <th colspan="4">失氧量 Oxygen Loss (g)</th>
+                <th colspan="5">还原度 Reduction Degree (%)</th>
+            </tr>
+            <tr>
+                <th>30min</th>
+                <th>60min</th>
+                <th>90min</th>
+                <th>最终<br>Final</th>
+                <th>30min</th>
+                <th>60min</th>
+                <th>90min</th>
+                <th>最终<br>Final</th>
+                <th>dR/dt<br>(%/min)</th>
+            </tr>
+            {% for item in test_results %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ item.mass_before }}</td>
+                <td>{{ item.mass_after }}</td>
+                <td>{{ item.oxygen_loss_30min }}</td>
+                <td>{{ item.oxygen_loss_60min }}</td>
+                <td>{{ item.oxygen_loss_90min }}</td>
+                <td>{{ item.oxygen_loss_final }}</td>
+                <td>{{ item.red_degree_30min }}</td>
+                <td>{{ item.red_degree_60min }}</td>
+                <td>{{ item.red_degree_90min }}</td>
+                <td>{{ item.red_degree_final }}</td>
+                <td>{{ item.red_rate }}</td>
+            </tr>
+            {% endfor %}
+            <tr>
+                <td>平均值<br>Average</td>
+                <td>{{ (test_results[0].mass_before + test_results[1].mass_before) / 2 }}</td>
+                <td>{{ (test_results[0].mass_after + test_results[1].mass_after) / 2 }}</td>
+                <td>{{ (test_results[0].oxygen_loss_30min + test_results[1].oxygen_loss_30min) / 2 }}</td>
+                <td>{{ (test_results[0].oxygen_loss_60min + test_results[1].oxygen_loss_60min) / 2 }}</td>
+                <td>{{ (test_results[0].oxygen_loss_90min + test_results[1].oxygen_loss_90min) / 2 }}</td>
+                <td>{{ (test_results[0].oxygen_loss_final + test_results[1].oxygen_loss_final) / 2 }}</td>
+                <td>{{ (test_results[0].red_degree_30min + test_results[1].red_degree_30min) / 2 }}</td>
+                <td>{{ (test_results[0].red_degree_60min + test_results[1].red_degree_60min) / 2 }}</td>
+                <td>{{ (test_results[0].red_degree_90min + test_results[1].red_degree_90min) / 2 }}</td>
+                <td>{{ (test_results[0].red_degree_final + test_results[1].red_degree_final) / 2 }}</td>
+                <td>{{ (test_results[0].red_rate + test_results[1].red_rate) / 2 }}</td>
+            </tr>
+        </table>
+
+        <div class="section-title">5. 还原度指标 Reducibility Index</div>
+        <table class="data-table">
+            <tr>
+                <th>RI（%）</th>
+                <th>dR/dt（%/min）</th>
+                <th>R<sub>60</sub>（%）</th>
+                <th>t<sub>40</sub>（min）</th>
+                <th>t<sub>50</sub>（min）</th>
+                <th>t<sub>70</sub>（min）</th>
+            </tr>
+            <tr>
+                <td>{{ reducibility_indices.RI }}</td>
+                <td>{{ reducibility_indices.dRdt }}</td>
+                <td>{{ reducibility_indices.R60 }}</td>
+                <td>{{ reducibility_indices.t40 }}</td>
+                <td>{{ reducibility_indices.t50 }}</td>
+                <td>{{ reducibility_indices.t70 }}</td>
+            </tr>
+        </table>
+
+        <div class="section-title">6. 结果计算 Result Calculation</div>
+        <p>根据GB/T 13241-2017标准，还原度计算公式如下：</p>
+        <p>R = (m₀ × O / 16) × 100%</p>
+        <p>式中：</p>
+        <p>R — 还原度，%；</p>
+        <p>m₀ — 失氧量，g；</p>
+        <p>O — 试样中含氧总量，g。</p>
+        <p>其中：O = 0.43 × TFe + 0.23 × SiO₂ + 0.53 × Al₂O₃ + 0.40 × CaO + 0.40 × MgO</p>
+        <p>还原速率：dR/dt = (R₆₀ - R₃₀) / 30</p>
+        <p>还原指数：RI = R₆₀</p>
+
+        <div class="section-title">7. 结论与评价 Conclusion and Evaluation</div>
+        <p>{{ conclusion }}</p>
+
+        <div class="section-title">8. 备注 Remarks</div>
+        <p>1. 本报告仅对送检样品负责；</p>
+        <p>2. 未经实验室书面批准，不得部分复制本报告；</p>
+        <p>3. 有异议请于收到报告之日起15天内提出，逾期不予受理。</p>
+
+        <div class="signature">
+            <div class="signature-item">
+                <p>测试人员 Tested by: {{ tester }}</p>
+                <p>日期 Date: {{ test_date }}</p>
+            </div>
+            <div class="signature-item">
+                <p>审核人员 Reviewed by: {{ reviewer }}</p>
+                <p>日期 Date: {{ review_date }}</p>
+            </div>
+        </div>
+
+        <div class="footnote">
+            <p>实验室名称：{{ lab_info.name }}</p>
+            <p>地址：{{ lab_info.address }}</p>
+            <p>电话：{{ lab_info.phone }}</p>
+            <p>邮编：{{ lab_info.postal_code }}</p>
+        </div>
+    </div>
+</body>
+</html>

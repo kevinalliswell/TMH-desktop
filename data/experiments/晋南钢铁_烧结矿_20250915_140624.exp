@@ -1,0 +1,27 @@
+{
+    "version": "1.0",
+    "format": "TMH_Experiment",
+    "created_at": "2025-09-15T14:06:24.506862",
+    "data": {
+        "experiment_id": "825ea937-dd6d-4692-9db7-505c9e48d937",
+        "experiment_name": "晋南钢铁",
+        "sample_name": "烧结矿",
+        "sample_weight": 518.0,
+        "start_time": "2025-09-15T14:06:24.506593",
+        "end_time": null,
+        "description": "无",
+        "operator": "kevin",
+        "experiment_type": "GB/T 13241-2017 铁矿石还原性测定方法",
+        "analysis_results_json": null,
+        "timestamps": [],
+        "temperatures": [],
+        "weights": [],
+        "weight_losses": [],
+        "gas_flows": {
+            "CO": [],
+            "CO2": [],
+            "N2": [],
+            "H2": []
+        }
+    }
+}

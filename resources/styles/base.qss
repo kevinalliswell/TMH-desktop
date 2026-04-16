@@ -1,0 +1,58 @@
+/* 全局字体与前景 */
+* { font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif; }
+QWidget { background: #121212; color: #E0E0E0; }
+
+/* “数码管”显示：给 QLabel 设置 role=lcd 属性即可 */
+QLabel[role="lcd"] {
+    background: #000;
+    color: #00FF00;
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 3px 6px;
+    min-width: 80px;
+    qproperty-alignment: AlignCenter;
+}
+
+/* 监控状态条：用 objectName=monitorStatus + 动态属性 state 切换颜色 */
+QLabel#monitorStatus {
+    background: #1A1A1A;
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+QLabel#monitorStatus[state="idle"]  { color: #00BFFF; border-color: #2B65EC; }
+QLabel#monitorStatus[state="ok"]    { color: #4CAF50; border-color: #388E3C; }
+QLabel#monitorStatus[state="warn"]  { color: #FF9800; border-color: #F57C00; }
+QLabel#monitorStatus[state="error"] { color: #F44336; border-color: #D32F2F; }
+
+/* 分组框 */
+QGroupBox {
+    font-size: 12pt; font-weight: 600;
+    border: 1px solid #555; border-radius: 6px;
+    margin-top: 12px; padding-top: 10px;
+}
+QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 6px; }
+
+/* 按钮 */
+QPushButton {
+    padding: 6px 12px; border: 1px solid #555; border-radius: 8px;
+    background: #2D2D30;
+}
+QPushButton:hover   { background: #3A3A3E; }
+QPushButton:pressed { background: #202024; }
+QPushButton:disabled{ color: #888; border-color: #444; background: #262626; }
+
+/* 表格 */
+QTableWidget {
+    background: #1E1E1E;
+    color: #E0E0E0;
+    gridline-color: #444;
+    selection-background-color: #2D2D30;
+    selection-color: #FFFFFF;
+}
+QHeaderView::section {
+    background: #2D2D30;
+    color: #FFFFFF;
+    padding: 4px;
+    border: 1px solid #444;
+}

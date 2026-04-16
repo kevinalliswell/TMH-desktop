@@ -1,0 +1,27 @@
+{
+    "version": "1.0",
+    "format": "TMH_Experiment",
+    "created_at": "2025-09-19T23:09:05.865946",
+    "data": {
+        "experiment_id": "8db6b637-83ac-4370-881d-a511e0205f19",
+        "experiment_name": "test",
+        "sample_name": "test",
+        "sample_weight": 512.0,
+        "start_time": "2025-09-19T23:09:05.865447",
+        "end_time": null,
+        "description": "test",
+        "operator": "test",
+        "experiment_type": "GB/T 13241-2017 铁矿石还原性测定方法",
+        "analysis_results_json": null,
+        "timestamps": [],
+        "temperatures": [],
+        "weights": [],
+        "weight_losses": [],
+        "gas_flows": {
+            "CO": [],
+            "CO2": [],
+            "N2": [],
+            "H2": []
+        }
+    }
+}

@@ -1,0 +1,27 @@
+{
+    "version": "1.0",
+    "format": "TMH_Experiment",
+    "created_at": "2025-09-14T10:59:22.826295",
+    "data": {
+        "experiment_id": "126593c4-c279-43d4-a5c0-610869a57363",
+        "experiment_name": "test-0914-1",
+        "sample_name": "test-0914-1",
+        "sample_weight": 567.0,
+        "start_time": "2025-09-14T10:59:22.825923",
+        "end_time": null,
+        "description": "test-0914-1",
+        "operator": "test-0914-1",
+        "experiment_type": "自定义高温测试实验",
+        "analysis_results_json": null,
+        "timestamps": [],
+        "temperatures": [],
+        "weights": [],
+        "weight_losses": [],
+        "gas_flows": {
+            "CO": [],
+            "CO2": [],
+            "N2": [],
+            "H2": []
+        }
+    }
+}

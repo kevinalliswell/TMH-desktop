@@ -1,0 +1,12 @@
+{
+    "version": "1.1.251121",
+    "author": "Shi Jinpeng/USTB",
+    "release_date": "2025-11-21",
+    "copyright": "© 2025 北京科技大学. All rights reserved.",
+    "description": "TMH-LPF-900 铁矿石冶金性能综合检测与控制系统",
+    "contact": "shijinpeng06@126.com",
+    "website": "https://www.ustb.edu.cn",
+    "build_date": "2025-11-21",
+    "python_version": "3.8+",
+    "platforms": ["Windows", "Linux", "macOS"]
+}

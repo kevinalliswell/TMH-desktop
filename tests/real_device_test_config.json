@@ -1,0 +1,93 @@
+{
+  "test_config": {
+    "description": "真实设备气体流量稳定性测试配置",
+    "version": "1.0",
+    "created": "2025-09-25",
+    "device_mode": "real"
+  },
+  "device_settings": {
+    "initialization_timeout": 10.0,
+    "communication_retry": 3,
+    "device_warmup_time": 5.0,
+    "response_timeout": 5.0,
+    "verification_enabled": true
+  },
+  "test_parameters": {
+    "stability_check_interval": 1.0,
+    "flow_tolerance": 0.05,
+    "response_timeout": 3.0,
+    "max_retry_attempts": 2,
+    "settlement_time": 2.0,
+    "verification_delay": 0.5
+  },
+  "test_scenarios": {
+    "device_check": {
+      "description": "设备连接和基本功能检查",
+      "duration": 30,
+      "test_modes": ["communication"],
+      "gas_types": ["CO", "CO2", "N2", "H2"]
+    },
+    "communication_test": {
+      "description": "通信稳定性专项测试",
+      "duration": 120,
+      "test_modes": ["communication"],
+      "gas_types": ["CO", "CO2", "N2", "H2"],
+      "test_interval": 2.0
+    },
+    "flow_stability_test": {
+      "description": "流量设置稳定性测试",
+      "duration": 300,
+      "test_modes": ["comprehensive"],
+      "gas_types": ["CO", "CO2", "N2", "H2"],
+      "flow_ranges": {
+        "CO": [0.0, 5.0, 10.0],
+        "CO2": [0.0, 3.0, 6.0],
+        "N2": [0.0, 10.0, 15.0],
+        "H2": [0.0, 2.0, 4.0]
+      }
+    },
+    "endurance_test": {
+      "description": "长期稳定性测试",
+      "duration": 1800,
+      "test_modes": ["endurance"],
+      "gas_types": ["CO", "CO2", "N2", "H2"],
+      "cycles": 200
+    },
+    "stress_test": {
+      "description": "压力测试（频繁切换）",
+      "duration": 600,
+      "test_modes": ["endurance"],
+      "gas_types": ["CO", "CO2", "N2", "H2"],
+      "rapid_switching": true,
+      "switch_interval": 0.5
+    }
+  },
+  "alert_thresholds": {
+    "success_rate_min": 98.0,
+    "response_time_max": 2.0,
+    "flow_accuracy_min": 95.0,
+    "flow_stability_max": 3.0,
+    "communication_quality_min": 95.0,
+    "connection_stability_min": 99.0
+  },
+  "safety_limits": {
+    "max_flow_rate": 20.0,
+    "emergency_stop_enabled": true,
+    "auto_zero_on_error": true,
+    "max_continuous_errors": 5
+  },
+  "reporting": {
+    "generate_charts": true,
+    "include_raw_data": true,
+    "export_formats": ["txt", "json", "csv"],
+    "auto_save": true,
+    "detailed_logging": true,
+    "communication_logs": true
+  },
+  "post_test_actions": {
+    "auto_zero_flows": true,
+    "generate_summary": true,
+    "check_device_status": true,
+    "cleanup_connections": true
+  }
+}

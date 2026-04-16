@@ -1,0 +1,65 @@
+# TMH 1.1.250907 - 铁矿石冶金性能综合检测系统依赖包
+# 添加构建相关依赖
+pyinstaller>=6.16.0
+
+# GUI Framework
+PySide6>=6.9.0
+
+# Data visualization and plotting
+pyqtgraph>=0.13.0
+numpy>=2.3.3
+
+# Data analysis and processing
+pandas>=2.0.0
+
+# Excel file support for data export
+openpyxl>=3.1.0
+
+# Serial communication
+pyserial>=3.5
+
+# Local communication protocol package (installed from packages/tmh_comm)
+# Install via: pip install -e packages/tmh_comm
+# tmh_comm  # local package - see packages/tmh_comm/
+
+# System monitoring and performance
+psutil>=7.1.0
+
+
+# Standard library dependencies (already included in Python)
+# - sqlite3
+# - json
+# - os
+# - sys
+# - datetime
+# - threading
+# - queue
+# - logging
+# - time
+# - pathlib
+# - typing
+# - dataclasses
+# - enum
+# - collections
+# - contextlib
+# - abc
+# - statistics
+# - hashlib
+# - secrets
+# - re
+# - functools
+# - atexit
+# - traceback
+# - csv
+# - binascii
+# - random
+# - uuid
+
+# Optional dependencies for enhanced functionality
+# matplotlib>=3.7.0  # Alternative plotting (if needed)
+# scipy>=1.10.0      # Scientific computing (if needed)
+
+# Development and testing dependencies (optional)
+# pytest>=7.0.0      # Testing framework
+# black>=23.0.0       # Code formatting
+# flake8>=6.0.0       # Linting

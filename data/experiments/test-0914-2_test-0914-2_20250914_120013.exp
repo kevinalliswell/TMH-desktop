@@ -1,0 +1,27 @@
+{
+    "version": "1.0",
+    "format": "TMH_Experiment",
+    "created_at": "2025-09-14T12:00:13.892409",
+    "data": {
+        "experiment_id": "a688c5a3-decd-499c-8586-744fdf98a888",
+        "experiment_name": "test-0914-2",
+        "sample_name": "test-0914-2",
+        "sample_weight": 567.0,
+        "start_time": "2025-09-14T12:00:13.892049",
+        "end_time": null,
+        "description": "test-0914-1",
+        "operator": "kevin",
+        "experiment_type": "改进型还原性测定",
+        "analysis_results_json": null,
+        "timestamps": [],
+        "temperatures": [],
+        "weights": [],
+        "weight_losses": [],
+        "gas_flows": {
+            "CO": [],
+            "CO2": [],
+            "N2": [],
+            "H2": []
+        }
+    }
+}

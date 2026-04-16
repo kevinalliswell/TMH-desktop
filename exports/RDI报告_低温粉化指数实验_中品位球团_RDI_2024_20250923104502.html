@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>铁矿石低温还原粉化实验检测报告</title>
+    <style>
+        body {
+            font-family: "SimSun", "宋体", serif;
+            line-height: 1.5;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            width: 21cm;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 20px;
+        }
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .subtitle {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        .report-info {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .report-info td {
+            padding: 8px;
+            border: 1px solid #000;
+        }
+        .report-info .label {
+            font-weight: bold;
+            width: 30%;
+            background-color: #f2f2f2;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 20px 0 10px 0;
+            border-bottom: 1px solid #000;
+            padding-bottom: 5px;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .data-table th, .data-table td {
+            padding: 8px;
+            border: 1px solid #000;
+            text-align: center;
+        }
+        .data-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .footnote {
+            font-size: 12px;
+            margin-top: 50px;
+            border-top: 1px solid #000;
+            padding-top: 10px;
+        }
+        .signature {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .signature-item {
+            width: 45%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">铁矿石低温还原粉化实验检测报告</div>
+            <div class="subtitle">Iron Ore Low Temperature Reduction Degradation Index Test Report</div>
+            <div class="subtitle">（参照GB/T 13242-2017）</div>
+        </div>
+
+        <table class="report-info">
+            <tr>
+                <td class="label">报告编号 Report No.</td>
+                <td>{{ report_info.report_no }}</td>
+                <td class="label">测试日期 Test Date</td>
+                <td>{{ test_date }}</td>
+            </tr>
+            <tr>
+                <td class="label">委托单位 Client</td>
+                <td colspan="3">{{ report_info.client }}</td>
+            </tr>
+            <tr>
+                <td class="label">样品名称 Sample Name</td>
+                <td>{{ report_info.sample_name }}</td>
+                <td class="label">样品编号 Sample No.</td>
+                <td>{{ report_info.sample_no }}</td>
+            </tr>
+            <tr>
+                <td class="label">来样日期 Receiving Date</td>
+                <td>{{ report_info.receiving_date }}</td>
+                <td class="label">报告日期 Report Date</td>
+                <td>{{ report_info.report_date }}</td>
+            </tr>
+            <tr>
+                <td class="label">样品状态 Sample Status</td>
+                <td colspan="3">{{ report_info.sample_status }}</td>
+            </tr>
+        </table>
+
+        <div class="section-title">1. 测试仪器与设备 Testing Equipment</div>
+        <table class="data-table">
+            <tr>
+                <th>序号 No.</th>
+                <th>设备名称 Equipment Name</th>
+                <th>型号 Model</th>
+                <th>精度 Precision</th>
+                <th>设备编号 Equipment No.</th>
+            </tr>
+            {% for item in equipment %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ item.name }}</td>
+                <td>{{ item.model }}</td>
+                <td>{{ item.precision }}</td>
+                <td>{{ item.equipment_no }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <div class="section-title">2. 测试条件 Test Conditions</div>
+        <table class="data-table">
+            <tr>
+                <th>参数 Parameter</th>
+                <th>标准值 Standard Value</th>
+                <th>实际值 Actual Value</th>
+            </tr>
+            {% for item in test_conditions %}
+            <tr>
+                <td>{{ item.parameter }}</td>
+                <td>{{ item.standard_value }}</td>
+                <td>{{ item.actual_value }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <div class="section-title">3. 测试结果 Test Results</div>
+        <table class="data-table">
+            <tr>
+                <th rowspan="2">测试组别<br>Test Group</th>
+                <th rowspan="2">试验前质量<br>Mass Before Test<br>(g)</th>
+                <th colspan="3">筛分后质量 Mass After Screening (g)</th>
+                <th rowspan="2">RDI<sub>-3.15</sub><br>(%)</th>
+                <th rowspan="2">RDI<sub>-0.5</sub><br>(%)</th>
+            </tr>
+            <tr>
+                <th>+3.15mm</th>
+                <th>-3.15mm +0.5mm</th>
+                <th>-0.5mm</th>
+            </tr>
+            {% for item in test_results %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ item.mass_before }}</td>
+                <td>{{ item.mass_plus_3_15 }}</td>
+                <td>{{ item.mass_minus_3_15_plus_0_5 }}</td>
+                <td>{{ item.mass_minus_0_5 }}</td>
+                <td>{{ item.rdi_minus_3_15 }}</td>
+                <td>{{ item.rdi_minus_0_5 }}</td>
+            </tr>
+            {% endfor %}
+            <tr>
+                <td colspan="5" style="text-align: right; font-weight: bold;">平均值 Average:</td>
+                <td>{{ avg_results.rdi_minus_3_15 }}</td>
+                <td>{{ avg_results.rdi_minus_0_5 }}</td>
+            </tr>
+        </table>
+
+        <div class="section-title">4. 结果计算 Result Calculation</div>
+        <p>低温还原粉化指数计算按照GB/T 13242-2017标准执行：</p>
+        <p>RDI<sub>-3.15</sub> = (m<sub>2</sub> / m<sub>1</sub>) × 100%</p>
+        <p>RDI<sub>-0.5</sub> = (m<sub>3</sub> / m<sub>1</sub>) × 100%</p>
+        <p>式中：</p>
+        <p>m<sub>1</sub> — 试验前铁矿石试样质量，g；</p>
+        <p>m<sub>2</sub> — 试验后小于3.15mm粒级的铁矿石质量，g；</p>
+        <p>m<sub>3</sub> — 试验后小于0.5mm粒级的铁矿石质量，g。</p>
+
+        <div class="section-title">5. 结论与评价 Conclusion and Evaluation</div>
+        <p>{{ conclusion }}</p>
+
+        <div class="section-title">6. 备注 Remarks</div>
+        <p>1. 本报告仅对送检样品负责；</p>
+        <p>2. 未经实验室书面批准，不得部分复制本报告；</p>
+        <p>3. 有异议请于收到报告之日起15天内提出，逾期不予受理。</p>
+
+        <div class="signature">
+            <div class="signature-item">
+                <p>测试人员 Tested by: {{ tester }}</p>
+                <p>日期 Date: {{ test_date }}</p>
+            </div>
+            <div class="signature-item">
+                <p>审核人员 Reviewed by: {{ reviewer }}</p>
+                <p>日期 Date: {{ review_date }}</p>
+            </div>
+        </div>
+
+        <div class="footnote">
+            <p>实验室名称：{{ lab_info.name }}</p>
+            <p>地址：{{ lab_info.address }}</p>
+            <p>电话：{{ lab_info.phone }}</p>
+            <p>邮编：{{ lab_info.postal_code }}</p>
+        </div>
+    </div>
+</body>
+</html>

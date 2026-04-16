@@ -1,0 +1,874 @@
+{
+  "experiment_modes": {
+    "standard_modes": {
+      "GB_13241_2017": {
+        "name": "GB/T 13241-2017 铁矿石还原性测定方法",
+        "description": "标准铁矿石还原性测定实验",
+        "category": "standard",
+        "enabled": true,
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至900℃，N₂保护",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 0,
+            "heating_rate": 10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          },
+          {
+            "stage_name": "STABILIZING",
+            "description": "900℃恒温30min，N₂气氛",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 30.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 15.0,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "还原180min，30%CO+70%N₂",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 180.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 4.5,
+              "CO2": 0.0,
+              "N2": 10.5,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "COOLING",
+            "description": "N₂保护冷却至室温",
+            "target_temp": 25.0,
+            "temp_tolerance": 0.0,
+            "duration": 0,
+            "heating_rate": -10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ]
+      },
+      "GB_13242_2017": {
+        "name": "GB/T 13242-2017 铁矿石低温粉化试验方法",
+        "description": "低温条件下铁矿石粉化特性测试",
+        "category": "standard",
+        "enabled": true,
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至500℃，N₂保护",
+            "target_temp": 500.0,
+            "temp_tolerance": 5.0,
+            "duration": 0,
+            "heating_rate": 10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          },
+          {
+            "stage_name": "STABILIZING",
+            "description": "500℃恒温30min，N₂气氛",
+            "target_temp": 500.0,
+            "temp_tolerance": 5.0,
+            "duration": 30.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 15.0,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "还原60min，20%CO+20%CO₂+60%N₂",
+            "target_temp": 500.0,
+            "temp_tolerance": 5.0,
+            "duration": 60.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 3.0,
+              "CO2": 3.0,
+              "N2": 9.0,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "COOLING",
+            "description": "N₂保护冷却至室温",
+            "target_temp": 25.0,
+            "temp_tolerance": 0.0,
+            "duration": 0,
+            "heating_rate": -10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ]
+      },
+      "GB_13240_2018": {
+        "name": "GB/T 13240-2018 球团矿自由膨胀指数测定方法",
+        "description": "球团矿在还原气氛下的膨胀特性测试",
+        "category": "standard",
+        "enabled": true,
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至900℃，N₂保护",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 0,
+            "heating_rate": 10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 10.0,
+              "H2": 0.0,
+              "total_flow": 10.0
+            }
+          },
+          {
+            "stage_name": "STABILIZING",
+            "description": "900℃恒温15min，N₂气氛",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 15.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 15.0,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "还原60min，30%CO+70%N₂",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 60.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 4.5,
+              "CO2": 0.0,
+              "N2": 10.5,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "COOLING",
+            "description": "N₂保护冷却至50℃",
+            "target_temp": 50.0,
+            "temp_tolerance": 0.0,
+            "duration": 0,
+            "heating_rate": -10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ]
+      }
+    },
+    "custom_modes": {
+      "CUSTOM_HIGH_TEMP_TEST": {
+        "type_id": "CUSTOM_HIGH_TEMP_TEST",
+        "name": "自定义高温测试实验",
+        "description": "用户自定义的高温条件测试实验",
+        "category": "custom",
+        "enabled": true,
+        "created_by": "user",
+        "created_time": "2024-01-01T00:00:00",
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至1000℃，N₂保护",
+            "target_temp": 1000.0,
+            "temp_tolerance": 10.0,
+            "duration": 0,
+            "heating_rate": 15.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 8.0,
+              "H2": 0.0,
+              "total_flow": 8.0
+            }
+          },
+          {
+            "stage_name": "STABILIZING",
+            "description": "1000℃恒温20min，N₂气氛",
+            "target_temp": 1000.0,
+            "temp_tolerance": 10.0,
+            "duration": 20.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 12.0,
+              "H2": 0.0,
+              "total_flow": 12.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "还原120min，25%CO+75%N₂",
+            "target_temp": 1000.0,
+            "temp_tolerance": 10.0,
+            "duration": 120.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 3.0,
+              "CO2": 0.0,
+              "N2": 9.0,
+              "H2": 0.0,
+              "total_flow": 12.0
+            }
+          },
+          {
+            "stage_name": "COOLING",
+            "description": "N₂保护冷却至室温",
+            "target_temp": 25.0,
+            "temp_tolerance": 0.0,
+            "duration": 0,
+            "heating_rate": -5.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ]
+      },
+      "CUSTOM_HIGH_TEMP_LONG_REDUCTION": {
+        "type_id": "CUSTOM_HIGH_TEMP_LONG_REDUCTION",
+        "name": "高温长时还原试验",
+        "description": "1050℃下进行240分钟还原的自定义实验",
+        "category": "custom",
+        "enabled": true,
+        "created_by": "user",
+        "created_time": "2025-08-19T14:29:17.149176",
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至1050℃",
+            "target_temp": 1050.0,
+            "temp_tolerance": 8.0,
+            "duration": 0,
+            "heating_rate": 12.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          },
+          {
+            "stage_name": "STABILIZING",
+            "description": "1050℃恒温45min",
+            "target_temp": 1050.0,
+            "temp_tolerance": 8.0,
+            "duration": 45.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 10.0,
+              "H2": 0.0,
+              "total_flow": 10.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "高温长时还原240min，25%CO+75%N₂",
+            "target_temp": 1050.0,
+            "temp_tolerance": 8.0,
+            "duration": 240.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 3.75,
+              "CO2": 0.0,
+              "N2": 11.25,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "COOLING",
+            "description": "缓慢冷却至30℃",
+            "target_temp": 30.0,
+            "temp_tolerance": 0.0,
+            "duration": 0,
+            "heating_rate": -8.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ]
+      },
+      "CUSTOM_MODIFIED_REDUCIBILITY": {
+        "type_id": "CUSTOM_MODIFIED_REDUCIBILITY",
+        "name": "改进型还原性测定",
+        "description": "从 GB/T 13241-2017 铁矿石还原性测定方法 复制的实验配置",
+        "category": "custom",
+        "enabled": true,
+        "created_by": "user",
+        "created_time": "2025-08-19T14:29:17.153158",
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至900℃，N₂保护",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 0.0,
+            "heating_rate": 10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          },
+          {
+            "stage_name": "STABILIZING",
+            "description": "900℃恒温30min，N₂气氛",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 30.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 15.0,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "还原180min，30%CO+70%N₂",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 180.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 4.5,
+              "CO2": 0.0,
+              "N2": 10.5,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "COOLING",
+            "description": "N₂保护冷却至室温",
+            "target_temp": 25.0,
+            "temp_tolerance": 0.0,
+            "duration": 0.0,
+            "heating_rate": -10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ]
+      },
+      "CUSTOM_COPIED_GB_13240_2018_20250913_101542": {
+        "type_id": "CUSTOM_COPIED_GB_13240_2018_20250913_101542",
+        "name": "自定义_GB/T 13240-2018 球团矿自由膨胀指数测定方法",
+        "description": "从 GB/T 13240-2018 球团矿自由膨胀指数测定方法 复制的自定义实验模式",
+        "category": "custom",
+        "enabled": true,
+        "created_by": "user",
+        "created_time": "2025-09-13T10:15:42.858213",
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至900℃，N₂保护",
+            "target_temp": 900.0,
+            "temp_tolerance": 10.0,
+            "duration": 0,
+            "heating_rate": 10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 10.0,
+              "H2": 0.0,
+              "total_flow": 10.0
+            }
+          },
+          {
+            "stage_name": "STABILIZING",
+            "description": "900℃恒温15min，N₂气氛",
+            "target_temp": 900.0,
+            "temp_tolerance": 10.0,
+            "duration": 15.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 15.0,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "还原60min，30%CO+70%N₂",
+            "target_temp": 900.0,
+            "temp_tolerance": 10.0,
+            "duration": 60.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 4.5,
+              "CO2": 0.0,
+              "N2": 10.5,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "COOLING",
+            "description": "N₂保护冷却至50℃",
+            "target_temp": 50.0,
+            "temp_tolerance": 0.0,
+            "duration": 0,
+            "heating_rate": -10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ]
+      },
+      "CUSTOM_COPIED_GB_13242_2017_20250913_101601": {
+        "type_id": "CUSTOM_COPIED_GB_13242_2017_20250913_101601",
+        "name": "自定义_GB/T 13242-2017 铁矿石低温粉化试验方法",
+        "description": "从 GB/T 13242-2017 铁矿石低温粉化试验方法 复制的自定义实验模式",
+        "category": "custom",
+        "enabled": true,
+        "created_by": "user",
+        "created_time": "2025-09-13T10:16:01.015737",
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至500℃，N₂保护",
+            "target_temp": 500.0,
+            "temp_tolerance": 5.0,
+            "duration": 0,
+            "heating_rate": 10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          },
+          {
+            "stage_name": "STABILIZING",
+            "description": "500℃恒温30min，N₂气氛",
+            "target_temp": 500.0,
+            "temp_tolerance": 5.0,
+            "duration": 30.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 15.0,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "还原60min，20%CO+20%CO₂+60%N₂",
+            "target_temp": 500.0,
+            "temp_tolerance": 5.0,
+            "duration": 60.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 3.0,
+              "CO2": 3.0,
+              "N2": 9.0,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "COOLING",
+            "description": "N₂保护冷却至室温",
+            "target_temp": 25.0,
+            "temp_tolerance": 0.0,
+            "duration": 0,
+            "heating_rate": -10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ]
+      },
+      "CUSTOM_TEST_001": {
+        "type_id": "CUSTOM_TEST_001",
+        "name": "自定义测试实验",
+        "description": "这是一个测试用的自定义实验类型",
+        "category": "custom",
+        "enabled": true,
+        "created_by": "test_user",
+        "created_time": "2024-01-01T00:00:00",
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温阶段",
+            "target_temp": 800.0,
+            "temp_tolerance": 5.0,
+            "duration": 30.0,
+            "heating_rate": 10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ]
+      },
+      "CUSTOM_COPIED_GB_13240_2018_20250914_232124": {
+        "type_id": "CUSTOM_COPIED_GB_13240_2018_20250914_232124",
+        "name": "自定义2_GB/T 13240-2018 球团矿自由膨胀指数测定方法",
+        "description": "从 GB/T 13240-2018 球团矿自由膨胀指数测定方法 复制的自定义实验模式",
+        "category": "custom",
+        "enabled": true,
+        "created_by": "user",
+        "created_time": "2025-09-14T23:21:24.972726",
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至900℃，N₂保护",
+            "target_temp": 900.0,
+            "temp_tolerance": 10.0,
+            "duration": 0,
+            "heating_rate": 10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 10.0,
+              "H2": 0.0,
+              "total_flow": 10.0
+            }
+          },
+          {
+            "stage_name": "STABILIZING",
+            "description": "900℃恒温15min，N₂气氛",
+            "target_temp": 900.0,
+            "temp_tolerance": 10.0,
+            "duration": 15.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 15.0,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "还原60min，30%CO+70%N₂",
+            "target_temp": 900.0,
+            "temp_tolerance": 10.0,
+            "duration": 60.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 4.5,
+              "CO2": 0.0,
+              "N2": 10.5,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "COOLING",
+            "description": "N₂保护冷却至50℃",
+            "target_temp": 50.0,
+            "temp_tolerance": 0.0,
+            "duration": 0,
+            "heating_rate": -10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ]
+      },
+      "TEST_CUSTOM_001": {
+        "type_id": "TEST_CUSTOM_001",
+        "name": "测试自定义实验001",
+        "description": "这是一个测试用的自定义实验",
+        "category": "custom",
+        "enabled": true,
+        "created_by": "test_user",
+        "created_time": "2025-09-16T16:24:08.208258",
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至800℃",
+            "target_temp": 800.0,
+            "temp_tolerance": 5.0,
+            "duration": 20.0,
+            "heating_rate": 15.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 8.0,
+              "H2": 0.0,
+              "total_flow": 8.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "还原60min，40%CO+60%N₂",
+            "target_temp": 800.0,
+            "temp_tolerance": 5.0,
+            "duration": 60.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 4.0,
+              "CO2": 0.0,
+              "N2": 6.0,
+              "H2": 0.0,
+              "total_flow": 10.0
+            }
+          }
+        ]
+      },
+      "CUSTOM_COPIED_GB_13241_2017_20250926_105623": {
+        "name": "自定义_GB/T 13241-2017 铁矿石还原性测定方法",
+        "description": "从 GB/T 13241-2017 铁矿石还原性测定方法 复制的自定义实验模式",
+        "category": "custom",
+        "enabled": true,
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至900℃，N₂保护",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 0,
+            "heating_rate": 10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          },
+          {
+            "stage_name": "STABILIZING",
+            "description": "900℃恒温30min，N₂气氛",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 30.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 15.0,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "还原180min，30%CO+70%N₂",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 180.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 4.5,
+              "CO2": 0.0,
+              "N2": 10.5,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "COOLING",
+            "description": "N₂保护冷却至室温",
+            "target_temp": 25.0,
+            "temp_tolerance": 0.0,
+            "duration": 0,
+            "heating_rate": -10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ],
+        "created_by": "user",
+        "created_time": "2025-09-26T10:56:23.581723",
+        "copied_from": "GB_13241_2017"
+      },
+      "CUSTOM_COPIED_GB_13241_2017_20260216_160616": {
+        "name": "自定义2_GB/T 13241-2017 铁矿石还原性测定方法",
+        "description": "从 GB/T 13241-2017 铁矿石还原性测定方法 复制的自定义实验模式",
+        "category": "custom",
+        "enabled": true,
+        "stages": [
+          {
+            "stage_name": "HEATING",
+            "description": "升温至900℃，N₂保护",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 0,
+            "heating_rate": 10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          },
+          {
+            "stage_name": "STABILIZING",
+            "description": "900℃恒温30min，N₂气氛",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 30.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 15.0,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "REDUCING",
+            "description": "还原180min，30%CO+70%N₂",
+            "target_temp": 900.0,
+            "temp_tolerance": 5.0,
+            "duration": 180.0,
+            "heating_rate": 0.0,
+            "gas_settings": {
+              "CO": 4.5,
+              "CO2": 0.0,
+              "N2": 10.5,
+              "H2": 0.0,
+              "total_flow": 15.0
+            }
+          },
+          {
+            "stage_name": "COOLING",
+            "description": "N₂保护冷却至室温",
+            "target_temp": 25.0,
+            "temp_tolerance": 0.0,
+            "duration": 0,
+            "heating_rate": -10.0,
+            "gas_settings": {
+              "CO": 0.0,
+              "CO2": 0.0,
+              "N2": 5.0,
+              "H2": 0.0,
+              "total_flow": 5.0
+            }
+          }
+        ],
+        "created_by": "user",
+        "created_time": "2026-02-16T16:06:16.684906",
+        "copied_from": "GB_13241_2017"
+      }
+    }
+  },
+  "stage_name_mappings": {
+    "IDLE": "待机",
+    "HEATING": "升温",
+    "STABILIZING": "恒温",
+    "REDUCING": "还原",
+    "COOLING": "冷却",
+    "COMPLETED": "完成"
+  },
+  "validation_rules": {
+    "temperature": {
+      "min": 25.0,
+      "max": 1200.0,
+      "tolerance_max": 50.0
+    },
+    "flow_rate": {
+      "min": 0.0,
+      "max": 50.0
+    },
+    "duration": {
+      "min": 0.0,
+      "max": 1440.0
+    },
+    "heating_rate": {
+      "min": -50.0,
+      "max": 50.0
+    }
+  }
+}
