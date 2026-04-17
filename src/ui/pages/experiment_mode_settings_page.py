@@ -148,12 +148,12 @@ class ExperimentModeSettingsPage(QWidget):
     mode_updated = Signal(str, dict)   # (mode_id, mode_data)
     mode_deleted = Signal(str)         # (mode_id,)
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, mode_manager=None):
         super().__init__(parent)
         self.setWindowTitle("实验模式设置")
         
         # 实验模式管理器
-        self.mode_manager = ExperimentModeManager()
+        self.mode_manager = mode_manager or ExperimentModeManager()
         
         # 当前选中的实验模式
         self.current_mode = None

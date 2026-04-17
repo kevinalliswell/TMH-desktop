@@ -21,17 +21,17 @@ class BalanceClient(BaseDevice):
     # 命令响应等待时间(秒)
     COMMAND_WAIT_TIME = 0.5
     
-    def __init__(self, config_path: str):
+    def __init__(self, config_source):
         """初始化电子天平客户端
         
         Args:
-            config_path: 配置文件路径
+            config_source: 配置文件路径或注入配置
         """
-        super().__init__(config_path, "Balance", "COM_RS232_Balance")
+        super().__init__(config_source, "Balance", "COM_RS232_Balance")
         
         # 验证配置
         if not self.config:
-            raise ValueError(f"无法加载配置文件: {config_path}")
+            raise ValueError(f"无法加载配置文件: {self.config_path}")
             
         # 移除模拟数据设置，专注实时数据采集
         

@@ -1,8 +1,10 @@
 # src/ui/pages/integrated_control_page.py
+
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QSplitter, QTabWidget, QMessageBox, QDialog, QInputDialog
 from PySide6.QtCore import Qt
-import time
 
+from src.application.services import ExperimentWorkflowService
+from src.ui.presenters import ExperimentControlPresenter
 from src.ui.ui_components.chart_tabs import ChartTabs
 from src.ui.ui_components.control_panel import ControlPanel
 from src.ui.ui_components.monitor_panel import MonitorPanel
@@ -10,7 +12,6 @@ from src.ui.ui_components.experiment_status import ExperimentStatus
 from src.ui.dialogs.experiment_dialog import ExperimentDialog
 from src.models.experiment_state import ExperimentPhase
 from src.services.experiment_file import ExperimentFile
-from src.services.database import ExperimentData
 from src.services.experiment_runtime import ExperimentRuntime
 from src.services.experiment_facade import ExperimentFacade
 from src.services.experiment_type_manager import ExperimentTypeManager
@@ -25,14 +26,25 @@ class IntegratedControlPage(QWidget):
     - 右侧：实验控制面板
     """
 
-    def __init__(self, device_manager, data_handler, parent=None, experiment_backend=None):
+    def __init__(
+        self,
+        device_manager,
+        data_handler,
+        parent=None,
+        experiment_backend=None,
+        experiment_api=None,
+        device_hub=None,
+    ):
         super().__init__(parent)
         self.device_manager = device_manager
+        self.device_hub = device_hub or device_manager
         self.data_handler = data_handler
-        self.experiment_api = ExperimentFacade(
+        self.experiment_api = experiment_api or ExperimentFacade(
             experiment_backend or ExperimentRuntime(device_manager, data_handler, self)
         )
         self._experiment_api_signals_connected = False
+        self._control_panel_signals_connected = False
+        self._connected_data_handler = None
 
         self.logger = get_logger(__name__)
         
@@ -41,6 +53,19 @@ class IntegratedControlPage(QWidget):
         
         # 实验类型管理器
         self.experiment_type_manager = ExperimentTypeManager()
+        self.workflow_service = ExperimentWorkflowService(
+            device_manager=self.device_hub,
+            experiment_api=self.experiment_api,
+            experiment_file_manager=self.experiment_file_manager,
+            experiment_type_manager=self.experiment_type_manager,
+            logger=self.logger,
+        )
+        self.presenter = ExperimentControlPresenter(
+            view=self,
+            experiment_api=self.experiment_api,
+            workflow_service=self.workflow_service,
+            logger=self.logger,
+        )
 
         # 实验状态跟踪（用于数据表格记录实时状态文本）
         self._was_experiment_active = False
@@ -89,14 +114,26 @@ class IntegratedControlPage(QWidget):
     def _connect_signals(self):
         # 绑定 DataHandler → UI
         self.logger.debug("信号连接成功！")
-        if self.data_handler:
+        if self._connected_data_handler and self._connected_data_handler is not self.data_handler:
+            try:
+                self._connected_data_handler.all_data_updated.disconnect(self.update_ui_with_snapshot)
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                self._connected_data_handler.experiment_data_sampled.disconnect(self.update_experiment_data)
+            except (RuntimeError, TypeError):
+                pass
+            self._connected_data_handler = None
+
+        if self.data_handler and self._connected_data_handler is not self.data_handler:
             # 实时数据信号 → 监控面板
             self.data_handler.all_data_updated.connect(self.update_ui_with_snapshot)
             # 实验数据信号 → 图表和数据表格
             self.data_handler.experiment_data_sampled.connect(self.update_experiment_data)
+            self._connected_data_handler = self.data_handler
         
         # 连接控制面板信号：监听信号，处理信号
-        if self.control_panel:
+        if self.control_panel and not self._control_panel_signals_connected:
             self.control_panel.start_experiment.connect(self.handle_start_experiment)   # 监听信号，处理开始实验逻辑
             self.control_panel.stop_experiment.connect(self.handle_stop_experiment)   # 监听信号，处理停止实验逻辑
             self.control_panel.gas_flow_set.connect(self.handle_gas_flow_set)   # 监听信号，处理气体流量设置逻辑
@@ -104,6 +141,56 @@ class IntegratedControlPage(QWidget):
             self.control_panel.save_data.connect(self.handle_save_data)   # 监听信号，处理保存数据逻辑
             self.control_panel.reset_experiment.connect(self.handle_reset_experiment)   # 监听信号，处理实验重置逻辑
             self.control_panel.set_initial_weight.connect(self.handle_set_initial_weight)   # 监听信号，处理设置初始重量逻辑
+            self._control_panel_signals_connected = True
+
+    def rebind_runtime(self, device_manager, data_handler, experiment_api, device_hub=None) -> None:
+        """Refresh runtime-backed dependencies after AppRuntime restart."""
+        if (
+            self.experiment_api
+            and self.experiment_api is not experiment_api
+            and self._experiment_api_signals_connected
+        ):
+            try:
+                self.experiment_api.status_updated.disconnect(self._on_experiment_status_updated)
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                self.experiment_api.system_message_updated.disconnect(self._on_system_message_updated)
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                self.experiment_api.experiment_started.disconnect(self._on_experiment_started)
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                self.experiment_api.experiment_stopped.disconnect(self._on_experiment_stopped)
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                self.experiment_api.experiment_time_updated.disconnect(self._on_experiment_time_updated)
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                self.experiment_api.stage_info_updated.disconnect(self._on_stage_info_updated)
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                self.experiment_api.state_changed.disconnect(self._on_state_changed)
+            except (RuntimeError, TypeError):
+                pass
+            self._experiment_api_signals_connected = False
+        elif self.experiment_api is not experiment_api:
+            self._experiment_api_signals_connected = False
+
+        self.device_manager = device_manager
+        self.device_hub = device_hub or device_manager
+        self.data_handler = data_handler
+        self.experiment_api = experiment_api
+        self.workflow_service.device_manager = self.device_hub
+        self.workflow_service.experiment_api = self.experiment_api
+        self.presenter.experiment_api = self.experiment_api
+
+        self._connect_signals()
 
     def update_ui_with_snapshot(self, snapshot: dict):
         """更新监控面板实时显示数据"""
@@ -137,100 +224,7 @@ class IntegratedControlPage(QWidget):
 
     def handle_start_experiment(self):
         """处理开始实验按钮点击"""
-        self.logger.info(f"开始实验:{self.device_manager}")
-        try:
-            # 1. 检查设备状态
-            if not self._check_device_availability():
-                return
-            
-            # 2. 获取实验参数
-            experiment_params = self._get_experiment_parameters()
-            if not experiment_params:
-                return
-
-            self.logger.info(f"实验参数: {experiment_params}")
-            
-            # 3. 创建并保存实验数据
-            experiment_data, filepath = self._create_and_save_experiment_data(experiment_params)
-            if not experiment_data:
-                return
-
-            self.logger.info(f"实验对话框参数设置的数据: {experiment_data}")
-
-            # 4. 初始化实验控制器
-            if not self._initialize_experiment_facade():
-                return
-            
-            # 5. 设置实验模式
-            if not self._setup_experiment_mode(experiment_params):
-                return
-
-            # 6. 启动实验
-            if not self.experiment_api.start_experiment():
-                QMessageBox.critical(self, "错误", "启动实验失败！")
-                return
-
-            # === 启动成功后才执行 UI 和数据采集的初始化 ===
-
-            # 启动数据采集线程，备份原始数据
-            self.data_handler.start_save_db_thread()
-            
-            # 启用表格数据写入
-            self.chart_tabs.enable_table_data_writing()
-            
-            # 设置实验信息到图表组件
-            experiment_info = self._format_experiment_data_to_info(experiment_data)
-            self.chart_tabs.set_experiment_info(experiment_info)
-
-            # 更新UI状态（按钮由 _on_state_changed 统一管理）
-            self.experiment_status.update_experiment_info(experiment_params)
-
-            import os
-            filename = os.path.basename(filepath)
-            QMessageBox.information(self, "成功", f"实验已开始！\n\n实验文件：{filename}")
-            self.logger.info("实验已成功启动")
-
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"开始实验时发生错误：{str(e)}")
-            self.logger.error(f"开始实验失败：{str(e)}")
-
-    def _check_device_availability(self):
-        """检查设备可用性"""
-        if not self.device_manager:
-            QMessageBox.warning(self, "操作提示", "设备管理器未初始化！")
-            return False
-        
-        # 检查所有设备是否有数据
-        device_statuses = self.device_manager.get_all_status()
-        devices_without_data = []
-        
-        for device_name, status in device_statuses.items():
-            if not status.get("running", False):
-                devices_without_data.append(f"{device_name} (未运行)")
-                continue
-            
-            # 检查设备是否有最新数据
-            last_update_ts = status.get("last_update_ts")
-            if last_update_ts is None:
-                devices_without_data.append(f"{device_name} (无数据)")
-                continue
-            
-            # 检查数据是否过期（超过10秒认为过期）
-            current_time = time.time()
-            if current_time - last_update_ts > 10:
-                devices_without_data.append(f"{device_name} (数据过期)")
-                self.logger.warning(f"设备 {device_name} 数据过期: {current_time - last_update_ts:.1f}秒前")
-        
-        if devices_without_data:
-            device_list = "\n".join(devices_without_data)
-            QMessageBox.warning(self, "操作提示", 
-                f"以下设备无数据或数据过期，无法开始实验：\n\n{device_list}\n\n"
-                "请确保所有设备正常运行并获取到最新数据后再开始实验。")
-            return False
-        
-        # 所有设备都有数据，可以开始实验
-        self.logger.info(f"所有设备数据检查通过，共检查 {len(device_statuses)} 个设备")
-        return True
+        self.presenter.handle_start_experiment()
 
     def _get_experiment_parameters(self):
         """获取实验参数"""
@@ -238,43 +232,6 @@ class IntegratedControlPage(QWidget):
         if dialog.exec() == QDialog.Accepted:
             return dialog.get_experiment_params()
         return None
-
-    def _create_and_save_experiment_data(self, experiment_params):
-        """创建并保存实验数据"""
-        import uuid
-        from datetime import datetime
-        
-        # 创建实验数据对象
-        experiment_data = ExperimentData(
-            experiment_id=str(uuid.uuid4()),
-            experiment_name=experiment_params["project_name"],
-            sample_name=experiment_params["sample_name"],
-            sample_weight=experiment_params["sample_weight"],
-            start_time=datetime.now().isoformat(),
-            description=experiment_params["notes"],
-            operator=experiment_params["operator"],
-            experiment_type=experiment_params["experiment_type"]
-        )
-
-        self.logger.info(f"实验数据: {experiment_data}")
-        
-        # 生成实验文件名
-        filename = self.experiment_file_manager.generate_filename(experiment_data)
-        
-        # 确保实验文件目录存在
-        from src.utils.path_manager import PathManager
-        experiments_dir = PathManager.get_data_path("experiments")
-        import os
-        os.makedirs(experiments_dir, exist_ok=True)
-        filepath = os.path.join(experiments_dir, filename)
-        
-        # 保存实验文件
-        if self.experiment_file_manager.save_experiment(filepath, experiment_data):
-            self.logger.info(f"实验文件已保存：{filepath}")
-            return experiment_data, filepath
-        else:
-            QMessageBox.critical(self, "错误", "保存实验文件失败！")
-            return None, None
 
     def _initialize_experiment_facade(self):
         """初始化实验外观服务"""
@@ -317,69 +274,9 @@ class IntegratedControlPage(QWidget):
         self.experiment_api.state_changed.connect(self._on_state_changed)
         self._experiment_api_signals_connected = True
 
-    def _setup_experiment_mode(self, experiment_params):
-        """设置实验模式"""
-        try:
-            # 根据实验模式ID设置实验类型
-            mode_id = experiment_params.get("experiment_mode_id")
-            if not mode_id:
-                QMessageBox.critical(self, "错误", "实验模式ID不能为空！")
-                return False
-            
-            # 使用实验控制器的统一方法设置实验模式
-            if self.experiment_api.set_experiment_mode_by_id(mode_id):
-                # 获取类型信息用于日志
-                type_info = self.experiment_type_manager.get_type_by_id(mode_id)
-                if type_info:
-                    self.logger.info(f"设置实验模式成功: {type_info.name}")
-                else:
-                    self.logger.info(f"设置实验模式成功: {mode_id}")
-                return True
-            else:
-                QMessageBox.critical(self, "错误", "设置实验模式失败！")
-                return False
-                
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"设置实验模式失败：{str(e)}")
-            return False
-
     def handle_stop_experiment(self):
         """处理停止实验按钮点击"""
-        try:
-            if not self.experiment_api.is_experiment_running():
-                QMessageBox.warning(self, "提示", "没有正在运行的实验")
-                return
-
-            # 停止实验前，务必确认
-            reply = QMessageBox.question(
-                self,
-                "停止实验确认",
-                "确定要停止实验吗？数据采集将终止！",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if reply == QMessageBox.No:
-                return
-
-            # 询问是否保存数据
-            if self.chart_tabs and self.chart_tabs.get_table_data_count() > 0:
-                save_reply = QMessageBox.question(
-                    self,
-                    "保存数据确认",
-                    "停止实验前是否需要保存数据？",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No
-                )
-                if save_reply == QMessageBox.Yes:
-                    self.handle_save_data()
-
-            # 停止实验控制器（清理由 _on_state_changed → _on_experiment_ended_cleanup 统一执行）
-            self.experiment_api.stop_experiment()
-            self.logger.info("实验已停止")
-            
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"停止实验时发生错误：{str(e)}")
-            self.logger.error(f"停止实验失败：{str(e)}")
+        self.presenter.handle_stop_experiment()
 
     def _on_state_changed(self, state):
         """
@@ -498,86 +395,16 @@ class IntegratedControlPage(QWidget):
         )
 
     def handle_gas_flow_set(self, gas_symbol: str, flow_value: float):
-        """
-        处理气体流量设置信号
-        
-        Args:
-            gas_symbol: 气体符号 (N2, CO, CO2, H2)
-            flow_value: 流量值 (L/min)
-        """
-        self.logger.info(f"处理气体流量设置信号: {gas_symbol}, {flow_value:.2f}")
-        self.logger.info(f"设备管理器: {self.device_manager}")
-        self.logger.info("实验控制器由实验外观服务管理")
-        try:
-            # 检查设备管理器是否可用
-            if not self.device_manager:
-                QMessageBox.warning(self, "操作提示", "设备管理器未初始化，无法设置气体流量")
-                return
-            
-            success = self.experiment_api.control_gas_flow(gas_symbol, flow_value)
-            if success:
-                self.logger.info(f"设置{gas_symbol}流量成功: {flow_value:.2f}L/min")
-            else:
-                self.logger.error(f"设置{gas_symbol}流量失败: {flow_value:.2f}L/min")
-                self.experiment_status.set_status(experiment_status=f"设置{gas_symbol}流量失败: {flow_value:.2f}L/min")
-                
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"设置{gas_symbol}流量时发生错误：{str(e)}")
-            self.logger.error(f"设置{gas_symbol}流量失败：{str(e)}")
-            self.experiment_status.set_status(experiment_status=f"设置{gas_symbol}流量失败: {str(e)}")
+        """处理气体流量设置信号"""
+        self.presenter.handle_gas_flow_set(gas_symbol, flow_value)
     
     def handle_tare_balance(self):
-        """
-        处理天平清零信号 - 带确认对话框
-        """
-        self.logger.info("处理天平清零信号")
-        try:
-            # 检查设备管理器是否可用
-            if not self.device_manager:
-                QMessageBox.warning(self, "操作提示", "设备管理器未初始化，无法进行天平清零")
-                return
-            
-            success = self.experiment_api.tare_balance(self)
-            if success:
-                self.logger.info("天平清零成功")
-                self.experiment_status.set_status(experiment_status="天平清零成功")
-            else:
-                self.logger.error("天平清零失败")
-                self.experiment_status.set_status(experiment_status="天平清零失败")
-                
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"天平清零时发生错误：{str(e)}")
-            self.logger.error(f"天平清零失败：{str(e)}")
-            self.experiment_status.set_status(experiment_status=f"天平清零失败: {str(e)}")
+        """处理天平清零信号 - 带确认对话框"""
+        self.presenter.handle_tare_balance()
     
     def handle_save_data(self):
-        """
-        处理保存数据信号
-        """
-        self.logger.info("处理保存数据信号")
-        try:
-            # 检查是否有数据可保存
-            if not self.chart_tabs or self.chart_tabs.get_table_data_count() == 0:
-                QMessageBox.warning(self, "操作提示", "没有数据可保存，请先运行实验")
-                return
-            
-            # 获取当前实验信息
-            experiment_info = self._get_current_experiment_info()
-            
-            # 显示导出对话框
-            success = self.chart_tabs.show_export_dialog(experiment_info)
-            
-            if success:
-                self.logger.info("实验数据导出成功")
-                self.experiment_status.set_status(experiment_status="实验数据导出成功")
-            else:
-                self.logger.warning("用户取消了数据导出")
-                self.experiment_status.set_status(experiment_status="数据导出已取消")
-            
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"保存数据时发生错误：{str(e)}")
-            self.logger.error(f"保存数据失败：{str(e)}")
-            self.experiment_status.set_status(experiment_status=f"保存数据失败: {str(e)}")
+        """处理保存数据信号"""
+        self.presenter.handle_save_data()
     
     def _get_current_experiment_info(self) -> dict:
         """
@@ -673,98 +500,76 @@ class IntegratedControlPage(QWidget):
             }
             
     def handle_reset_experiment(self):
-        """
-        处理实验重置信号
-        """
-        self.logger.info("处理实验重置信号")
-        # 重置前确认操作
-        reply = QMessageBox.question(
-            self,
-            "重置实验确认",
-            "确定要重置实验吗？所有数据将被清除！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        if reply == QMessageBox.No:
-            return
-
-        # 确认是否需要保存数据
-        reply = QMessageBox.question(
-            self,
-            "保存数据确认",
-            "确定要保存数据吗？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            self.handle_save_data()
-
-        try:
-            # 检查是否有正在运行的实验
-            if self.experiment_api.is_experiment_running():
-                # 先停止实验（通用清理由 _on_state_changed → _on_experiment_ended_cleanup 执行）
-                self.experiment_api.stop_experiment()
-                self.logger.info("实验已停止")
-            
-            # === 以下为重置特有的操作 ===
-            
-            # 重置气体流量显示
-            if self.control_panel:
-                self.control_panel.set_gas_flow_value('N2', 0.0)
-                self.control_panel.set_gas_flow_value('CO', 0.0)
-                self.control_panel.set_gas_flow_value('CO2', 0.0)
-                self.control_panel.set_gas_flow_value('H2', 0.0)
-            
-            # 设置安全气氛
-            if self.device_manager:
-                self.device_manager.set_flow('N2', 5.0)  # 5L/min N2保护
-                self.device_manager.set_flow('CO', 0.0)
-                self.device_manager.set_flow('CO2', 0.0)
-                self.device_manager.set_flow('H2', 0.0)
-
-            # 清空实验数据
-            if self.chart_tabs:
-                self.chart_tabs.clear_table_data()
-                self.logger.info("图表数据已清空")
-            
-            QMessageBox.information(self, "成功", "实验已重置，已切换到N₂保护气氛")
-            self.logger.info("实验重置成功")
-            self.experiment_status.set_status(experiment_status="实验重置成功")
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"重置实验时发生错误：{str(e)}")
-            self.logger.error(f"重置实验失败：{str(e)}")
-            self.experiment_status.set_status(experiment_status=f"重置实验失败: {str(e)}")
+        """处理实验重置信号"""
+        self.presenter.handle_reset_experiment()
    
     def handle_set_initial_weight(self):
-        """
-        处理设置初始重量信号 - 优化版本
-        通过实验控制器执行完整的设置流程：天平去皮 → 输入样品重量 → 计算总重量
-        """
-        self.logger.info("处理设置初始重量信号")
-        try:
-            # 检查实验控制器是否可用
-            if not self.experiment_api.get_controller():
-                error_msg = "实验控制器未初始化，无法设置初始重量"
-                self.logger.error(error_msg)
-                QMessageBox.warning(self, "操作提示", error_msg)
-                self.experiment_status.set_status(experiment_status=error_msg)
-                return
-            
-            # 通过实验控制器执行优化的设置初始重量流程
-            success = self.experiment_api.manual_set_initial_weight(self)
-            
-            if success:
-                self.logger.info("设置初始重量流程成功完成")
-                self.experiment_status.set_status(experiment_status="初始重量设置成功，已启用失重计算")
-            else:
-                self.logger.error("设置初始重量流程失败")
-                self.experiment_status.set_status(experiment_status="设置初始重量失败")
-                
-        except Exception as e:
-            error_msg = f"设置初始重量时发生错误：{str(e)}"
-            QMessageBox.critical(self, "错误", error_msg)
-            self.logger.error(error_msg)
-            self.experiment_status.set_status(experiment_status=f"设置初始重量失败: {str(e)}")
+        """处理设置初始重量信号 - 优化版本"""
+        self.presenter.handle_set_initial_weight()
+
+    def request_experiment_parameters(self):
+        """View hook for the presenter to request experiment parameters."""
+        return self._get_experiment_parameters()
+
+    def ensure_experiment_ready(self) -> bool:
+        """View hook for initializing controller and signal wiring."""
+        return self._initialize_experiment_facade()
+
+    def begin_experiment_session(self, experiment_data, experiment_file_path, experiment_params: dict) -> None:
+        """Apply UI-side effects after a successful experiment startup."""
+        if self.data_handler:
+            self.data_handler.start_save_db_thread()
+        if self.chart_tabs:
+            self.chart_tabs.enable_table_data_writing()
+            experiment_info = self._format_experiment_data_to_info(experiment_data)
+            self.chart_tabs.set_experiment_info(experiment_info)
+        self.experiment_status.update_experiment_info(experiment_params)
+
+    def confirm(self, title: str, message: str, default_no: bool = False) -> bool:
+        """Presenter-facing confirmation helper."""
+        default_button = QMessageBox.No if default_no else QMessageBox.Yes
+        reply = QMessageBox.question(
+            self,
+            title,
+            message,
+            QMessageBox.Yes | QMessageBox.No,
+            default_button,
+        )
+        return reply == QMessageBox.Yes
+
+    def show_warning(self, title: str, message: str) -> None:
+        QMessageBox.warning(self, title, message)
+
+    def show_error(self, title: str, message: str) -> None:
+        QMessageBox.critical(self, title, message)
+
+    def show_info(self, title: str, message: str) -> None:
+        QMessageBox.information(self, title, message)
+
+    def set_status_message(self, message: str) -> None:
+        self.experiment_status.set_status(experiment_status=message)
+
+    def dialog_parent(self):
+        return self
+
+    def has_exportable_data(self) -> bool:
+        return bool(self.chart_tabs and self.chart_tabs.get_table_data_count() > 0)
+
+    def export_current_data(self) -> bool:
+        experiment_info = self._get_current_experiment_info()
+        return bool(self.chart_tabs and self.chart_tabs.show_export_dialog(experiment_info))
+
+    def reset_flow_display(self) -> None:
+        if self.control_panel:
+            self.control_panel.set_gas_flow_value('N2', 0.0)
+            self.control_panel.set_gas_flow_value('CO', 0.0)
+            self.control_panel.set_gas_flow_value('CO2', 0.0)
+            self.control_panel.set_gas_flow_value('H2', 0.0)
+
+    def clear_experiment_data_view(self) -> None:
+        if self.chart_tabs:
+            self.chart_tabs.clear_table_data()
+            self.logger.info("图表数据已清空")
 
 
 

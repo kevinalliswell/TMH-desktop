@@ -1,17 +1,18 @@
-# 数据模型层 - 状态机、数据结构等
+"""Experiment domain models and state machines."""
 
-from src.models.experiment_state import (
+from src.domain.experiment.state_machine import (
     ExperimentPhase,
     ExperimentState,
-    ExperimentStateMachine,
     ExperimentStateMachineCore,
     InvalidTransitionError,
+    VALID_TRANSITIONS,
 )
 
 __all__ = [
     "ExperimentPhase",
     "ExperimentState",
-    "ExperimentStateMachine",
     "ExperimentStateMachineCore",
     "InvalidTransitionError",
+    "VALID_TRANSITIONS",
 ]
+

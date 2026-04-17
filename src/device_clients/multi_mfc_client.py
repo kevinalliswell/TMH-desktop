@@ -64,17 +64,17 @@ class MultiMFCClient(BaseDevice):
     # 命令队列大小
     COMMAND_QUEUE_SIZE = 50
 
-    def __init__(self, config_path: str):
+    def __init__(self, config_source):
         """初始化多路MFC客户端
         
         Args:
-            config_path: 配置文件路径
+            config_source: 配置文件路径或注入配置
         """
-        super().__init__(config_path, "MultiMFC", "COM_RS485_MFC")
+        super().__init__(config_source, "MultiMFC", "COM_RS485_MFC")
         
         # 验证配置加载
         if not self.config:
-            raise ValueError(f"无法加载配置文件: {config_path}")
+            raise ValueError(f"无法加载配置文件: {self.config_path}")
         
         # 获取设备地址信息    
         self.slave_addresses = self.config.get("SLAVE_ADDRESS_MFC", {})

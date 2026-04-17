@@ -18,6 +18,9 @@ openpyxl>=3.1.0
 # Serial communication
 pyserial>=3.5
 
+# Optional external device-driver bundle
+# Install via: pip install -r requirements-device.txt
+
 # Local communication protocol package (installed from packages/tmh_comm)
 # Install via: pip install -e packages/tmh_comm
 # tmh_comm  # local package - see packages/tmh_comm/

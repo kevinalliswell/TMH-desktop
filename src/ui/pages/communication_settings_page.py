@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QLabel, QTabWidget, QToolButton,
 )
 from PySide6.QtCore import Qt
+from src.application.services import CommunicationService
 from src.services.comm_settings import CommSettings
 from src.utils.logger import get_logger
 from typing import Any, Dict
@@ -24,13 +25,20 @@ class CommunicationSettings(QWidget):
     ``(device_key, param_name)``，以便刷新、校验和恢复默认值。
     """
 
-    def __init__(self, runtime=None):
-        super().__init__()
+    def __init__(self, runtime=None, parent=None, comm_settings=None, communication_service=None, apply_callback=None):
+        super().__init__(parent)
         self.logger = get_logger(__name__)
         self.logger.debug("初始化通信设置页面")
 
-        self.comm_settings = CommSettings()
+        if communication_service is not None:
+            self.communication_service = communication_service
+        elif comm_settings is not None and hasattr(comm_settings, "service"):
+            self.communication_service = comm_settings.service
+        else:
+            self.communication_service = CommunicationService()
+        self.comm_settings = comm_settings or CommSettings(service=self.communication_service)
         self.runtime = runtime
+        self._apply_callback = apply_callback
 
         # 控件引用: {(device_key, param_name): QWidget, ...}
         self._widgets: Dict[tuple, QWidget] = {}
@@ -38,7 +46,7 @@ class CommunicationSettings(QWidget):
         # 脏状态跟踪
         self._dirty = False
 
-        self.logger.debug(f"加载的设置: {self.comm_settings.settings}")
+        self.logger.debug(f"加载的设置: {self.communication_service.get_settings()}")
 
         self._init_ui()
         self._connect_signals()
@@ -62,9 +70,9 @@ class CommunicationSettings(QWidget):
             "COM_RS232_Balance": "电子天平",
         }
         for device_key, title in devices.items():
-            if device_key in self.comm_settings.settings:
+            if device_key in self.communication_service.get_settings():
                 tab = self._create_device_tab(
-                    self.comm_settings.settings[device_key], device_key
+                    self.communication_service.get_settings()[device_key], device_key
                 )
                 self._tab_widget.addTab(tab, title)
 
@@ -170,7 +178,7 @@ class CommunicationSettings(QWidget):
         port_combo = QComboBox()
         port_combo.setMinimumWidth(150)
         port_combo.setMinimumHeight(20)
-        available_ports = self.comm_settings.get_available_ports()
+        available_ports = self.communication_service.get_available_ports()
         port_combo.addItems(available_ports)
         current_port = settings.get("port")
         if current_port in available_ports:
@@ -251,7 +259,7 @@ class CommunicationSettings(QWidget):
         slave_layout.setSpacing(15)
         slave_layout.setContentsMargins(10, 10, 10, 10)
 
-        slave_addresses = self.comm_settings.settings.get("SLAVE_ADDRESS_MFC", {})
+        slave_addresses = self.communication_service.get_mfc_slave_addresses()
         for gas, address in slave_addresses.items():
             label = QLabel(f"{gas}:")
             label.setMinimumWidth(30)
@@ -273,7 +281,7 @@ class CommunicationSettings(QWidget):
         scaling_layout.setSpacing(15)
         scaling_layout.setContentsMargins(10, 10, 10, 10)
 
-        flow_scaling = self.comm_settings.settings.get("FLOW_SCALING", {})
+        flow_scaling = self.communication_service.get_flow_scaling()
         for gas, scale in flow_scaling.items():
             label = QLabel(f"{gas}:")
             label.setMinimumWidth(30)
@@ -298,7 +306,7 @@ class CommunicationSettings(QWidget):
         slave_layout.setVerticalSpacing(8)
         slave_layout.setHorizontalSpacing(15)
 
-        temp_config = self.comm_settings.get_temp_config()
+        temp_config = self.communication_service.get_temp_config()
         slave_address = temp_config.get("slave_address", 0)
 
         spin = QSpinBox()
@@ -328,7 +336,7 @@ class CommunicationSettings(QWidget):
         sampling_layout.setVerticalSpacing(12)
         sampling_layout.setHorizontalSpacing(20)
 
-        sampling_config = self.comm_settings.get_sampling_config()
+        sampling_config = self.communication_service.get_sampling_config()
         interval_spin = QSpinBox()
         interval_spin.setRange(1, 60)
         interval_spin.setValue(int(sampling_config.get("interval_s", 1.0)))
@@ -363,7 +371,7 @@ class CommunicationSettings(QWidget):
         current_text = port_combo.currentText()
         port_combo.blockSignals(True)
         port_combo.clear()
-        available_ports = self.comm_settings.get_available_ports()
+        available_ports = self.communication_service.get_available_ports()
         port_combo.addItems(available_ports)
         if current_text in available_ports:
             port_combo.setCurrentText(current_text)
@@ -383,8 +391,8 @@ class CommunicationSettings(QWidget):
         """更新设备串口参数"""
         try:
             self.logger.debug(f"更新设置: {device}.{key} = {value}")
-            if device in self.comm_settings.settings:
-                self.comm_settings.settings[device][key] = value
+            if device in self.communication_service.get_settings():
+                self.communication_service.update_serial_setting(device, key, value)
                 self._mark_dirty()
             else:
                 self.logger.warning(f"设备 {device} 不存在于配置中")
@@ -394,9 +402,7 @@ class CommunicationSettings(QWidget):
     def _update_mfc_slave_address(self, gas: str, address: int) -> None:
         """更新 MFC 从机地址"""
         try:
-            if "SLAVE_ADDRESS_MFC" not in self.comm_settings.settings:
-                self.comm_settings.settings["SLAVE_ADDRESS_MFC"] = {}
-            self.comm_settings.settings["SLAVE_ADDRESS_MFC"][gas] = address
+            self.communication_service.update_mfc_slave_address(gas, address)
             self._mark_dirty()
             self.logger.debug(f"更新MFC从机地址: {gas} = {address}")
         except Exception as e:
@@ -405,15 +411,7 @@ class CommunicationSettings(QWidget):
     def _update_temp_slave_address(self, address: int) -> None:
         """更新温控仪表从机地址（同时写入嵌套和顶级配置）"""
         try:
-            # 嵌套配置
-            temp_config = self.comm_settings.get_temp_config()
-            temp_config["slave_address"] = address
-
-            # 顶级配置（TempClient 优先读取此值）
-            if "SLAVE_ADDRESS_TEMP" not in self.comm_settings.settings:
-                self.comm_settings.settings["SLAVE_ADDRESS_TEMP"] = {}
-            self.comm_settings.settings["SLAVE_ADDRESS_TEMP"]["TEMP"] = address
-
+            self.communication_service.update_temp_slave_address(address)
             self._mark_dirty()
             self.logger.debug(f"更新温控仪表从机地址: {address}")
         except Exception as e:
@@ -422,9 +420,7 @@ class CommunicationSettings(QWidget):
     def _update_flow_scaling(self, gas: str, scale: float) -> None:
         """更新流量缩放"""
         try:
-            if "FLOW_SCALING" not in self.comm_settings.settings:
-                self.comm_settings.settings["FLOW_SCALING"] = {}
-            self.comm_settings.settings["FLOW_SCALING"][gas] = scale
+            self.communication_service.update_flow_scaling(gas, scale)
             self._mark_dirty()
             self.logger.debug(f"更新流量缩放: {gas} = {scale}")
         except Exception as e:
@@ -433,8 +429,7 @@ class CommunicationSettings(QWidget):
     def _update_sampling_interval(self, interval: int) -> None:
         """更新采样间隔"""
         try:
-            sampling_config = self.comm_settings.get_sampling_config()
-            sampling_config["interval_s"] = float(interval)
+            self.communication_service.update_sampling_interval(interval)
             self._mark_dirty()
             self.logger.debug(f"更新采样间隔: {interval}秒")
         except Exception as e:
@@ -446,11 +441,14 @@ class CommunicationSettings(QWidget):
     def _on_save(self) -> None:
         """保存设置到配置文件"""
         try:
-            self.comm_settings.save_settings()
+            self.communication_service.save()
             self._dirty = False
             self.logger.info("通信设置已保存")
-            if self.runtime:
-                self.runtime.apply_comm_settings()
+            apply_callback = self._apply_callback
+            if apply_callback is None and self.runtime:
+                apply_callback = self.runtime.apply_comm_settings
+            if apply_callback:
+                apply_callback()
                 QMessageBox.information(self, "提示", "设置已保存并已应用")
             else:
                 QMessageBox.information(self, "提示", "设置已保存（重启后生效）")
@@ -469,7 +467,7 @@ class CommunicationSettings(QWidget):
         if reply != QMessageBox.Yes:
             return
 
-        defaults = self.comm_settings.default_settings
+        defaults = self.communication_service.default_settings
 
         # 逐个控件回填默认值
         for (device_key, param), widget in self._widgets.items():

@@ -1,0 +1,6 @@
+# Optional hardware-driver package bundle for PR-7 external device integration.
+# Install this file in deployment environments that publish the device packages.
+
+tmh-device-mfc==0.1.*
+tmh-device-balance==0.1.*
+tmh-device-temp==0.1.*

@@ -3,6 +3,7 @@ import json
 import os
 import threading
 import queue
+import copy
 from typing import Dict, Any, Optional, Union, List, Tuple
 
 import serial
@@ -16,9 +17,9 @@ from src.utils.path_manager import PathManager
 
 
 class BaseDevice(threading.Thread, ABC):
-    def __init__(self, config_path, device_type, comm_type):
+    def __init__(self, config_source, device_type, comm_type):
         super().__init__(daemon=True)
-        self.config_path = config_path
+        self.config_path = config_source if isinstance(config_source, str) else "<in-memory>"
         self.device_type = device_type
         self.comm_type = comm_type
         # 优化队列大小，提高数据处理效率
@@ -43,7 +44,7 @@ class BaseDevice(threading.Thread, ABC):
 
         # 加载配置文件
         try:
-            self.config = self.load_config(self.config_path)
+            self.config = self.load_config(config_source)
             if not self.config:
                 self.logger.error(f"无法加载配置文件: {self.config_path}")
                 raise ValueError(f"无法加载配置文件: {self.config_path}")
@@ -395,16 +396,21 @@ class BaseDevice(threading.Thread, ABC):
         """获取最近一次有效数据（不消费队列）"""
         return getattr(self, '_last_valid_data', None)
 
-    def load_config(self, config_path: str) -> Optional[Dict[str, Any]]:
+    def load_config(self, config_source) -> Optional[Dict[str, Any]]:
         """从配置文件加载参数
 
         参数:
-            config_path (str): 配置文件路径
+            config_source: 配置文件路径或内存配置字典
 
         返回:
             Optional[Dict[str, Any]]: 配置参数字典，加载失败返回None
         """
         try:
+            if isinstance(config_source, dict):
+                self.logger.debug("使用内存注入的设备配置")
+                return copy.deepcopy(config_source)
+
+            config_path = str(config_source)
             # 尝试直接打开配置文件
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:

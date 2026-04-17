@@ -45,17 +45,17 @@ class TempClient(BaseDevice):
     MAX_RETRIES = 3
     RETRY_DELAY = 0.2
 
-    def __init__(self, config_path: str):
+    def __init__(self, config_source):
         """初始化温度控制器客户端
         
         Args:
-            config_path: 配置文件路径
+            config_source: 配置文件路径或注入配置
         """
-        super().__init__(config_path, "Temperature", "COM_RS485_TEMP")
+        super().__init__(config_source, "Temperature", "COM_RS485_TEMP")
         
         # 验证配置
         if not self.config:
-            raise ValueError(f"无法加载配置文件: {config_path}")
+            raise ValueError(f"无法加载配置文件: {self.config_path}")
 
         # 获取设备地址（兼容两种配置来源）
         self.slave_address = self.config.get("SLAVE_ADDRESS_TEMP", {}).get("TEMP")
