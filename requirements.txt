@@ -10,7 +10,7 @@ pyqtgraph>=0.13.0
 numpy>=2.3.3
 
 # Data analysis and processing
-pandas>=2.0.0
+pandas>=3.0.2
 
 # Excel file support for data export
 openpyxl>=3.1.0
