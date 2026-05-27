@@ -17,13 +17,14 @@ from src.utils.path_manager import PathManager
 
 
 class BaseDevice(threading.Thread, ABC):
+    DATA_QUEUE_SIZE = 20  # 设备数据队列容量
+
     def __init__(self, config_source, device_type, comm_type):
         super().__init__(daemon=True)
         self.config_path = config_source if isinstance(config_source, str) else "<in-memory>"
         self.device_type = device_type
         self.comm_type = comm_type
-        # 优化队列大小，提高数据处理效率
-        self.data_queue = queue.Queue(maxsize=20)
+        self.data_queue = queue.Queue(maxsize=self.DATA_QUEUE_SIZE)
         self.stop_event = threading.Event()
         self.lock = threading.Lock()
         self.serial_port = None

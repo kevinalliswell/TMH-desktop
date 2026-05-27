@@ -8,6 +8,8 @@ from datetime import datetime
 from src.utils.logger import get_logger
 
 class DataHandler(QObject):
+    DATA_BUFFER_SIZE = 1000  # 数据缓冲区最大容量
+
     # 定义信号，用于向UI发送数据
     temperature_data_updated = Signal(dict)
     weight_data_updated = Signal(dict)
@@ -37,7 +39,7 @@ class DataHandler(QObject):
         self._latest_snapshot_bundle = None
 
         # 设置数据缓冲区最大容量，防止内存溢出
-        self.data_buffer = queue.Queue(maxsize=1000)  # 最多缓存1000条数据
+        self.data_buffer = queue.Queue(maxsize=self.DATA_BUFFER_SIZE)
         self.stop_event = threading.Event()
         
         # 初始化日志
