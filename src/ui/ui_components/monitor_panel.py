@@ -2,6 +2,7 @@
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QGridLayout, QLabel, QGroupBox, QHBoxLayout, QSizePolicy
 from PySide6.QtCore import QTimer
 from src.ui.adapters import map_frames_to_ui_snapshot
+from src.utils.logger import get_logger
 
 
 class MonitorPanel(QFrame):
@@ -223,7 +224,7 @@ class MonitorPanel(QFrame):
         # 强制刷新界面
         self.update()
         
-        print(f"[DEBUG] 字体样式已应用: {len(style_updates)} 个规则")  # 调试信息
+        get_logger(__name__).debug(f"字体样式已应用: {len(style_updates)} 个规则")
     
     def set_window_maximized_state(self, is_maximized):
         """

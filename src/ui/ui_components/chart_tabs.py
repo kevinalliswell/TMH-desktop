@@ -264,7 +264,7 @@ class ChartTabs(QTabWidget):
                 experiment_info=experiment_info
             )
         except Exception as e:
-            print(f"数据导出失败: {str(e)}")
+            self.logger.error(f"数据导出失败: {str(e)}")
             return False
     
     def show_export_dialog(self, experiment_info: dict = None) -> bool:
@@ -286,7 +286,7 @@ class ChartTabs(QTabWidget):
             
             return DataExportDialog.show_export_dialog(self.data_table, self, experiment_info)
         except Exception as e:
-            print(f"显示导出对话框失败: {str(e)}")
+            self.logger.error(f"显示导出对话框失败: {str(e)}")
             return False
     
     def get_table_data_count(self) -> int:

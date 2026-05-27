@@ -280,7 +280,7 @@ class MainWindow(QMainWindow):
             with open(qss_path, "r", encoding="utf-8") as f:
                 self.setStyleSheet(f.read())
         else:
-            print(f"样式文件不存在: {qss_path}")
+            self.logger.warning(f"样式文件不存在: {qss_path}")
 
     def _load_software_info(self):
         from src.utils.path_manager import PathManager
