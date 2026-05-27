@@ -205,7 +205,7 @@ class ExperimentDialog(QDialog):
                             seq = 1
                 else:
                     seq = 1
-            except:
+            except (json.JSONDecodeError, ValueError, KeyError, OSError):
                 seq = 1
 
             # 生成新编号

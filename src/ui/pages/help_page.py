@@ -2,6 +2,7 @@
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtCore import QUrl
 from src.utils.path_manager import PathManager
+from src.utils.logger import get_logger
 
 class HelpPage(QWidget):
     """帮助页面"""
@@ -33,7 +34,7 @@ class HelpPage(QWidget):
         # 获取help.html的绝对路径
         help_file = PathManager.get_resources_path("help.html")
 
-        print(f"help_file: {help_file}")
+        get_logger(__name__).debug(f"help_file: {help_file}")
         
         # 加载本地HTML文件
         self.web_view.setUrl(QUrl.fromLocalFile(help_file))

@@ -1,5 +1,6 @@
 # temp_client.py
 import os
+import queue
 import time
 import logging
 import threading
@@ -310,13 +311,13 @@ class TempClient(BaseDevice):
                         # 确保队列不满
                         try:
                             self.data_queue.put_nowait(temps)
-                        except:
+                        except queue.Full:
                             try:
                                 # 队列满时，清除一项再添加
                                 old_data = self.data_queue.get_nowait()
                                 self.data_queue.put_nowait(temps)
                                 self.logger.warning(f"{self.device_type} 数据队列已满，丢弃旧数据")
-                            except:
+                            except (queue.Full, queue.Empty):
                                 pass
                     else:
                         # 读取失败

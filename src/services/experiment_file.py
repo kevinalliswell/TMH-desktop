@@ -5,7 +5,10 @@ from typing import Dict, Optional, Any
 from dataclasses import asdict
 from .database import ExperimentData
 from ..utils.path_manager import PathManager
+from ..utils.logger import get_logger
 import json
+
+logger = get_logger(__name__)
 
 
 class ExperimentFile:
@@ -47,7 +50,7 @@ class ExperimentFile:
             return True
 
         except Exception as e:
-            print(f"保存实验文件失败: {e}")
+            logger.error(f"保存实验文件失败: {e}")
             return False
 
     def load_experiment(self, filepath: str) -> Optional[ExperimentData]:
@@ -66,7 +69,7 @@ class ExperimentFile:
             return ExperimentData(**exp_dict)
 
         except Exception as e:
-            print(f"加载实验文件失败: {e}")
+            logger.error(f"加载实验文件失败: {e}")
             return None
 
     def export_data(self, data: ExperimentData, filepath: str, format: str = "csv") -> bool:
@@ -85,7 +88,7 @@ class ExperimentFile:
                 raise ValueError(f"不支持的导出格式: {format}")
 
         except Exception as e:
-            print(f"导出数据失败: {e}")
+            logger.error(f"导出数据失败: {e}")
             return False
 
     def _export_csv(self, data: ExperimentData, filepath: str) -> bool:
@@ -128,7 +131,7 @@ class ExperimentFile:
             return True
 
         except Exception as e:
-            print(f"导出CSV失败: {e}")
+            logger.error(f"导出CSV失败: {e}")
             return False
 
     def _export_txt(self, data: ExperimentData, filepath: str) -> bool:
@@ -162,7 +165,7 @@ class ExperimentFile:
             return True
 
         except Exception as e:
-            print(f"导出TXT失败: {e}")
+            logger.error(f"导出TXT失败: {e}")
             return False
 
     def _export_xlsx(self, data: ExperimentData, filepath: str) -> bool:
@@ -200,7 +203,7 @@ class ExperimentFile:
             return True
 
         except Exception as e:
-            print(f"导出Excel失败: {e}")
+            logger.error(f"导出Excel失败: {e}")
             return False
 
     def generate_report(self, data: ExperimentData, filepath: str, format: str = "pdf") -> bool:
@@ -219,64 +222,18 @@ class ExperimentFile:
                 raise ValueError(f"不支持的报告格式: {format}")
 
         except Exception as e:
-            print(f"生成报告失败: {e}")
+            logger.error(f"生成报告失败: {e}")
             return False
 
     def _generate_pdf_report(self, data: ExperimentData, filepath: str) -> bool:
         """生成PDF报告"""
-        print("PDF报告生成功能尚未实现")
+        logger.warning("PDF报告生成功能尚未实现")
         return False
 
     def _generate_docx_report(self, data: ExperimentData, filepath: str) -> bool:
         """生成DOCX报告"""
-        print("DOCX报告生成功能尚未实现")
+        logger.warning("DOCX报告生成功能尚未实现")
         return False
 
     def _generate_xlsx_report(self, data: ExperimentData, filepath: str) -> bool:
         """生成XLSX报告"""
-
-
-class ExpSettings:
-    """实验参数配置类"""
-
-    def __init__(self):
-        self.config_file = PathManager.get_config_path('exp_settings.configs')
-        self.default_settings = {
-            "project_name": "",  # 项目名称
-            "sample_name": "",  # 样品名称
-            "sample_id": "",  # 样品编号
-            "sample_weight": 0.0,  # 样品初重(g)
-            "experiment_type": "GB/T 13241-2017",  # 实验类型
-            "operator": "",  # 操作人员
-            "date": "",  # 实验日期
-            "notes": "",  # 备注说明
-        }
-        self.settings = self.load_settings()
-
-    def load_settings(self) -> Dict[str, Any]:
-        """加载配置"""
-        try:
-            if not os.path.exists(self.config_file):
-                os.makedirs('configs', exist_ok=True)
-                with open(self.config_file, 'w', encoding='utf-8') as f:
-                    json.dump(self.default_settings, f, indent=4)
-                return self.default_settings
-
-            with open(self.config_file, 'r', encoding='utf-8') as f:
-                loaded_settings = json.load(f)
-                # 确保所有字段都存在
-                for key, value in self.default_settings.items():
-                    if key not in loaded_settings:
-                        loaded_settings[key] = value
-                return loaded_settings
-        except Exception as e:
-            print(f"加载实验参数配置失败: {e}")
-            return self.default_settings
-
-    def save_settings(self) -> None:
-        """保存配置"""
-        try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(self.settings, f, indent=4, ensure_ascii=False)
-        except Exception as e:
-            print(f"保存实验参数配置失败: {e}")

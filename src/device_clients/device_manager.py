@@ -15,12 +15,10 @@ from tmh_comm.standard import (
 )
 import json
 
-"""加载配置文件"""
-CONFIG_PATH = PathManager.get_config_path('comm_config.json')
-
-
 class DeviceManager:
-    def __init__(self, config_path=CONFIG_PATH):
+    def __init__(self, config_path: str | None = None):
+        if config_path is None:
+            config_path = PathManager.get_config_path('comm_config.json')
         # 设备注册表 - 支持动态注册
         self.devices = {}
         self._devices_lock = threading.Lock()  # 保护设备字典的线程安全访问

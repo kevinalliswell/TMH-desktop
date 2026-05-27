@@ -12,7 +12,7 @@ import uuid
 import logging
 from datetime import datetime
 from typing import Optional, Callable, Tuple
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QCoreApplication, QObject, Signal, QTimer
 
 from src.models.experiment_state import (
     ExperimentStateMachine,
@@ -28,7 +28,11 @@ from src.utils.path_manager import PathManager
 
 class ExperimentController(QObject):
     """实验控制器类"""
-    
+
+    # 实验常量
+    SAFETY_N2_FLOW_LPM = 5.0  # 安全气氛 N2 流量 (L/min)
+    AMBIENT_TEMP_CELSIUS = 25.0  # 默认环境/起始温度 (°C)
+
     # 信号定义
     status_updated = Signal(str)  # 实验状态更新
     system_message_updated = Signal(str)  # 系统消息更新
@@ -806,9 +810,8 @@ class ExperimentController(QObject):
                 self.system_message_updated.emit("天平去皮失败，无法设置初始重量")
                 return False
                 
-            # 等待一段时间让天平稳定
-            import time
-            time.sleep(0.1)  # 短暂等待让天平稳定（避免依赖 UI 的 processEvents）
+            # 让事件循环处理待处理事件，使天平读数稳定
+            QCoreApplication.processEvents()
             
             # 第二步：获取当前天平读数（去皮后应该接近0）
             current_balance_weight = 0.0
@@ -860,7 +863,7 @@ class ExperimentController(QObject):
     def _set_safety_atmosphere(self) -> None:
         """设置安全气氛"""
         if self.device_manager:
-            self.device_manager.set_flow('N2', 5.0)  # 5L/min N2保护
+            self.device_manager.set_flow('N2', self.SAFETY_N2_FLOW_LPM)
             self.device_manager.set_flow('CO', 0.0)
             self.device_manager.set_flow('CO2', 0.0)
             self.device_manager.set_flow('H2', 0.0)
@@ -994,8 +997,8 @@ class ExperimentController(QObject):
             
             # 如果是温度阶段（升温或冷却），基于温度计算进度
             elif stage.heating_rate != 0:
-                temp_diff = abs(stage.target_temp - 25.0)  # 假设起始温度为25°C
-                current_diff = abs(current_temp - 25.0)
+                temp_diff = abs(stage.target_temp - self.AMBIENT_TEMP_CELSIUS)
+                current_diff = abs(current_temp - self.AMBIENT_TEMP_CELSIUS)
                 if temp_diff > 0:
                     temp_progress = min(100.0, (current_diff / temp_diff) * 100)
                     return temp_progress
