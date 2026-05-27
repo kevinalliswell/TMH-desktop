@@ -12,7 +12,7 @@ import uuid
 import logging
 from datetime import datetime
 from typing import Optional, Callable, Tuple
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QCoreApplication, QObject, Signal, QTimer
 
 from src.models.experiment_state import (
     ExperimentStateMachine,
@@ -806,9 +806,8 @@ class ExperimentController(QObject):
                 self.system_message_updated.emit("天平去皮失败，无法设置初始重量")
                 return False
                 
-            # 等待一段时间让天平稳定
-            import time
-            time.sleep(0.1)  # 短暂等待让天平稳定（避免依赖 UI 的 processEvents）
+            # 让事件循环处理待处理事件，使天平读数稳定
+            QCoreApplication.processEvents()
             
             # 第二步：获取当前天平读数（去皮后应该接近0）
             current_balance_weight = 0.0
