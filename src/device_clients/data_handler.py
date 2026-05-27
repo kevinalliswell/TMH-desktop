@@ -16,7 +16,7 @@ class DataHandler(QObject):
     experiment_data_sampled = Signal(dict)  # 实验数据采样信号（图表和表格用）
     
     def __init__(self, db_path, save_interval=60, device_manager=None, experiment_db=None,
-                 state_machine=None):
+                 state_machine=None, snapshot_provider=None):
         """
         初始化数据处理器
         
@@ -31,8 +31,10 @@ class DataHandler(QObject):
         self.db_path = db_path
         self.save_interval = save_interval
         self.device_manager = device_manager
+        self.snapshot_provider = snapshot_provider
         self._injected_experiment_db = experiment_db
         self._sm = state_machine  # 集中式状态机引用
+        self._latest_snapshot_bundle = None
 
         # 设置数据缓冲区最大容量，防止内存溢出
         self.data_buffer = queue.Queue(maxsize=1000)  # 最多缓存1000条数据
@@ -114,6 +116,20 @@ class DataHandler(QObject):
     def set_device_manager(self, device_manager):
         """设置设备管理器"""
         self.device_manager = device_manager
+        if hasattr(device_manager, "get_snapshots"):
+            self.snapshot_provider = device_manager
+
+    def set_snapshot_provider(self, snapshot_provider):
+        """设置标准化快照提供者"""
+        self.snapshot_provider = snapshot_provider
+
+    def latest_snapshot_bundle(self):
+        """获取最近一次标准化快照集合"""
+        if self._latest_snapshot_bundle is not None:
+            return self._latest_snapshot_bundle
+        if self.snapshot_provider and hasattr(self.snapshot_provider, "get_snapshots"):
+            return self.snapshot_provider.get_snapshots()
+        return None
     
     def start(self):
         """启动数据处理与保存"""
@@ -273,9 +289,7 @@ class DataHandler(QObject):
         while not self.stop_event.is_set():
             try:
                 current_time = time.time()
-                
-                # 从设备管理器获取最新数据
-                data = self.device_manager.get_status()
+                data = self._get_current_snapshot_payload()
                 
                 # 1. 实时数据处理（用于监控面板显示）
                 if data != last_realtime_data:
@@ -312,6 +326,21 @@ class DataHandler(QObject):
             except Exception as e:
                 self.logger.error(f"数据处理出错: {str(e)}")
                 time.sleep(1)
+
+    def _get_current_snapshot_payload(self):
+        """获取当前采样数据，同时更新标准化快照缓存。"""
+        if self.snapshot_provider:
+            if hasattr(self.snapshot_provider, "get_snapshots"):
+                self._latest_snapshot_bundle = self.snapshot_provider.get_snapshots()
+            if hasattr(self.snapshot_provider, "get_status_legacy"):
+                return self.snapshot_provider.get_status_legacy()
+
+        if not self.device_manager:
+            raise ValueError("Device manager not set")
+
+        if hasattr(self.device_manager, "get_snapshots"):
+            self._latest_snapshot_bundle = self.device_manager.get_snapshots()
+        return self.device_manager.get_status()
     
     def _db_saving_loop(self):
         """数据库保存主循环，按照指定间隔保存数据"""

@@ -1,6 +1,7 @@
 ﻿# src/ui/ui_components/monitor_panel.py
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QGridLayout, QLabel, QGroupBox, QHBoxLayout, QSizePolicy
 from PySide6.QtCore import QTimer
+from src.ui.adapters import map_frames_to_ui_snapshot
 
 
 class MonitorPanel(QFrame):
@@ -249,17 +250,10 @@ class MonitorPanel(QFrame):
         """
         更新监控数据（仅使用标准化 frames）
         """
-        if not isinstance(frames, dict):
-            frames = {}
+        snapshot = map_frames_to_ui_snapshot(frames)
 
         # 温度 - 主要温度 (T7-T9)
-        temp_frame = frames.get("temperature")
-        temps = {}
-        if temp_frame and hasattr(temp_frame, "payload"):
-            payload = temp_frame.payload if isinstance(temp_frame.payload, dict) else {}
-            temps = payload.get("temperatures", {}) or {}
-            if not isinstance(temps, dict):
-                temps = {}
+        temps = snapshot.temperatures
         if temps:
             for name, val in temps.items():
                 if name in self.labels:
@@ -278,30 +272,19 @@ class MonitorPanel(QFrame):
                     self.labels[name].setText("--")
 
         # 流量信息
-        flows = {}
-        flow_frames = frames.get("flows") if isinstance(frames.get("flows"), dict) else {}
-        for gas_type, flow_frame in flow_frames.items():
-            if not flow_frame or not hasattr(flow_frame, "payload"):
-                continue
-            payload = flow_frame.payload if isinstance(flow_frame.payload, dict) else {}
-            pv = payload.get("pv")
-            if pv is None or not isinstance(pv, (int, float)) or pv != pv:
-                pv = None
-            flows[gas_type] = pv
+        flows = snapshot.flows
         if flows:
-            total_flow = 0.0
             for gas, val in flows.items():
                 if gas in self.labels:
                     if val is not None:
                         flow_val = val
                         self.labels[gas].setText(f"{flow_val:.2f}")
-                        total_flow += flow_val
                     else:
                         self.labels[gas].setText("--")
             
             # 更新总流量
             if "TotalFlow" in self.labels:
-                self.labels["TotalFlow"].setText(f"{total_flow:.2f}")
+                self.labels["TotalFlow"].setText(f"{snapshot.total_flow:.2f}")
         else:
             # 当没有流量数据时，设置所有气体标签为 "--"
             gas_labels = ["N2", "CO", "CO2", "H2", "TotalFlow"]
@@ -310,22 +293,14 @@ class MonitorPanel(QFrame):
                     self.labels[name].setText("--")
 
         # 重量相关
-        weight_frame = frames.get("weight")
-        if not weight_frame:
+        if snapshot.weight is None:
             # 当没有重量数据时显示 "--"
             self.labels["Balance"].setText("--")
             self.labels["WeightLoss"].setText("--")
             self.labels["WeightLossRate"].setText("--")
             return
 
-        payload = weight_frame.payload if hasattr(weight_frame, "payload") and isinstance(weight_frame.payload, dict) else {}
-        w = payload.get("weight")
-        if w is None or not isinstance(w, (int, float)) or w != w:
-            self.labels["Balance"].setText("--")
-            self.labels["WeightLoss"].setText("--")
-            self.labels["WeightLossRate"].setText("--")
-            return
-
+        w = snapshot.weight
         self.labels["Balance"].setText(f"{w:.3f}")
         if initial_weight > 0:
             weight_loss = initial_weight - w

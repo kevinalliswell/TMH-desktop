@@ -2,6 +2,7 @@
 import os
 import json
 import logging
+from dataclasses import dataclass
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QFrame,
@@ -24,7 +25,28 @@ from src.ui.ui_components.sidebar import Sidebar
 from src.ui.ui_components.status_bar import StatusBar
 
 # 导入运行时服务
+from src.application.services import (
+    CommunicationService,
+    HistoryQueryService,
+    ReportExportService,
+)
 from src.services.app_runtime import AppRuntime
+from src.services.database import ExperimentDatabase
+from src.services.experiment_facade import ExperimentFacade
+from src.services.experiment_modes import ExperimentModeManager
+from src.utils.password_manager import PasswordManager
+
+
+@dataclass
+class UiDependencies:
+    """UI composition root dependencies assembled by MainWindow."""
+
+    experiment_api: ExperimentFacade
+    communication_service: CommunicationService
+    experiment_mode_manager: ExperimentModeManager
+    history_query_service: HistoryQueryService
+    report_export_service: ReportExportService
+    password_manager: PasswordManager
 
 
 class MainWindow(QMainWindow):
@@ -33,6 +55,8 @@ class MainWindow(QMainWindow):
 
         self.logger = logging.getLogger(__name__)
         self.runtime = None
+        self.runtime_services = None
+        self.ui_dependencies = None
         self.integrated_control_page = None
 
         # 软件信息
@@ -49,6 +73,8 @@ class MainWindow(QMainWindow):
         # 初始化运行时服务
         self.runtime = AppRuntime(self)
         self.runtime.start()
+        self.runtime_services = self.runtime.services
+        self.ui_dependencies = self._build_ui_dependencies()
         self.runtime.comm_status_updated.connect(self._on_comm_status_updated)
 
         # 应用暗色主题
@@ -132,22 +158,54 @@ class MainWindow(QMainWindow):
     # ==============================
     # 页面管理
     # ==============================
-    def _create_pages(self):
-        # ✅ 把同一个 device_manager 和 data_handler 传给 IntegratedControlPage
-        self.integrated_control_page = IntegratedControlPage(
-            self.runtime.device_manager,
-            self.runtime.data_handler,
-            self,
-            experiment_backend=self.runtime.experiment_runtime,
+    def _build_ui_dependencies(self) -> UiDependencies:
+        """Assemble UI-facing services in one place."""
+        experiment_database = ExperimentDatabase()
+        history_query_service = HistoryQueryService(repository=experiment_database)
+        return UiDependencies(
+            experiment_api=ExperimentFacade(self.runtime_services.experiment_runtime),
+            communication_service=CommunicationService(),
+            experiment_mode_manager=ExperimentModeManager(),
+            history_query_service=history_query_service,
+            report_export_service=ReportExportService(
+                history_query_service=history_query_service
+            ),
+            password_manager=PasswordManager(),
         )
 
-        self.comm_settings_page = CommunicationSettings(self.runtime)
+    def _create_pages(self):
+        self.integrated_control_page = IntegratedControlPage(
+            self.runtime_services.device_manager,
+            self.runtime_services.data_handler,
+            self,
+            experiment_api=self.ui_dependencies.experiment_api,
+            device_hub=self.runtime_services.device_hub,
+        )
+
+        self.comm_settings_page = CommunicationSettings(
+            runtime=self.runtime,
+            parent=self,
+            communication_service=self.ui_dependencies.communication_service,
+            apply_callback=self._apply_comm_settings,
+        )
+
+        self.experiment_mode_settings_page = ExperimentModeSettingsPage(
+            parent=self,
+            mode_manager=self.ui_dependencies.experiment_mode_manager,
+        )
+
+        self.history_query_page = HistoryQuery(
+            parent=self,
+            history_query_service=self.ui_dependencies.history_query_service,
+            report_export_service=self.ui_dependencies.report_export_service,
+            password_manager=self.ui_dependencies.password_manager,
+        )
 
         pages = [
             HomePage(self.software_info),
             self.integrated_control_page,
-            ExperimentModeSettingsPage(),
-            HistoryQuery(),
+            self.experiment_mode_settings_page,
+            self.history_query_page,
             self.comm_settings_page,
             HelpPage(),
             AboutPage(),
@@ -155,6 +213,19 @@ class MainWindow(QMainWindow):
 
         for page in pages:
             self.stacked_widget.addWidget(page)
+
+    def _apply_comm_settings(self):
+        """Apply settings and refresh pages that hold runtime-backed references."""
+        self.runtime.apply_comm_settings()
+        self.runtime_services = self.runtime.services
+        self.ui_dependencies = self._build_ui_dependencies()
+        if self.integrated_control_page:
+            self.integrated_control_page.rebind_runtime(
+                self.runtime_services.device_manager,
+                self.runtime_services.data_handler,
+                self.ui_dependencies.experiment_api,
+                device_hub=self.runtime_services.device_hub,
+            )
 
     # ==============================
     # 通信状态

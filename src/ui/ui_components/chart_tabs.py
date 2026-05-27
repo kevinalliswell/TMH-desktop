@@ -1,6 +1,7 @@
 # src/ui/ui_components/chart_tabs.py
 from PySide6.QtWidgets import QTabWidget, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem
 import pyqtgraph as pg
+from src.ui.adapters import build_chart_table_row, map_frames_to_ui_snapshot
 from src.utils.logger import get_logger
 
 
@@ -83,7 +84,10 @@ class ChartTabs(QTabWidget):
             return
         if not isinstance(t, (int, float)) or t != t:
             return
-        temperatures, flows, weight_value = self._extract_from_frames(frames)
+        snapshot = map_frames_to_ui_snapshot(frames)
+        temperatures = snapshot.temperatures
+        flows = snapshot.flows
+        weight_value = snapshot.weight
 
         if temperatures:
             self._update_temperatures(t, temperatures)
@@ -95,44 +99,11 @@ class ChartTabs(QTabWidget):
         if self._table_data_enabled:
             self._insert_data_row_from_frames(
                 t,
-                temperatures,
-                flows,
-                weight_value,
+                snapshot,
                 experiment_status=experiment_status,
                 system_prompt=system_prompt,
                 initial_weight=initial_weight
             )
-
-    def _extract_from_frames(self, frames: dict):
-        temperatures = {}
-        flows = {}
-        weight_value = None
-
-        temp_frame = frames.get("temperature")
-        if temp_frame and hasattr(temp_frame, "payload"):
-            payload = temp_frame.payload if isinstance(temp_frame.payload, dict) else {}
-            temperatures = payload.get("temperatures", {}) or {}
-            if not isinstance(temperatures, dict):
-                temperatures = {}
-
-        weight_frame = frames.get("weight")
-        if weight_frame and hasattr(weight_frame, "payload"):
-            payload = weight_frame.payload if isinstance(weight_frame.payload, dict) else {}
-            weight_value = payload.get("weight")
-            if weight_value is None or not isinstance(weight_value, (int, float)) or weight_value != weight_value:
-                weight_value = None
-
-        flow_frames = frames.get("flows") if isinstance(frames.get("flows"), dict) else {}
-        for gas_type, flow_frame in flow_frames.items():
-            if not flow_frame or not hasattr(flow_frame, "payload"):
-                continue
-            payload = flow_frame.payload if isinstance(flow_frame.payload, dict) else {}
-            pv = payload.get("pv")
-            if pv is None or not isinstance(pv, (int, float)) or pv != pv:
-                pv = None
-            flows[gas_type] = pv
-
-        return temperatures, flows, weight_value
 
     def _update_temperatures(self, t: float, temperatures: dict):
         if not temperatures or not isinstance(temperatures, dict):
@@ -214,7 +185,7 @@ class ChartTabs(QTabWidget):
                 if valid_weights:
                     self.weight_curve.setData(valid_times, valid_weights)
 
-    def _insert_data_row_from_frames(self, t: float, temperatures: dict, flows: dict, weight: float,
+    def _insert_data_row_from_frames(self, t: float, snapshot,
                                      experiment_status: str = "", system_prompt: str = "", initial_weight: float = 0.0):
         """更新数据表格的一行数据"""
         row = self.data_table.rowCount()
@@ -223,54 +194,31 @@ class ChartTabs(QTabWidget):
         # 设置实验开始时间
         if self.experiment_start_time is None:
             self.experiment_start_time = t
-        
-        # 时间格式化为国标时间
-        import datetime
-        dt = datetime.datetime.fromtimestamp(t)
-        time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-        
-        # 计算实验时长
-        duration_seconds = int(t - self.experiment_start_time)
-        hours = duration_seconds // 3600
-        minutes = (duration_seconds % 3600) // 60
-        seconds = duration_seconds % 60
-        duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-        
-        # 样品温度（T8）- 处理缺失数据
-        sample_temp = temperatures.get('T8', None) if temperatures else None
-        self.logger.info(f" 表格 - T8温度: {sample_temp}")
-        self.logger.info(f" 表格 - temperatures: {temperatures}")
-        sample_temp_str = f"{sample_temp:.1f}" if sample_temp is not None and sample_temp != 0 else "--"
-        
-        # 气体流量PV值 - 处理缺失数据
-        n2_pv = flows.get('N2', 0) if flows.get('N2') is not None else 0
-        co_pv = flows.get('CO', 0) if flows.get('CO') is not None else 0
-        co2_pv = flows.get('CO2', 0) if flows.get('CO2') is not None else 0
-        h2_pv = flows.get('H2', 0) if flows.get('H2') is not None else 0
-        
-        # 计算失重和失重率
-        weight_loss_str = "--"
-        weight_loss_rate_str = "--"
-        if initial_weight > 0 and weight is not None:
-            weight_loss = initial_weight - weight
-            weight_loss_rate = (weight_loss / initial_weight) * 100
-            weight_loss_str = f"{weight_loss:.3f}"
-            weight_loss_rate_str = f"{weight_loss_rate:.2f}"
+        row_data = build_chart_table_row(
+            timestamp=t,
+            snapshot=snapshot,
+            experiment_start_time=self.experiment_start_time,
+            experiment_status=experiment_status,
+            system_prompt=system_prompt,
+            initial_weight=initial_weight,
+        )
+        self.logger.info(f" 表格 - T8温度: {snapshot.sample_temperature}")
+        self.logger.info(f" 表格 - snapshot: {snapshot}")
         
         # 创建表格项
         items = [
-            QTableWidgetItem(time_str),  # 时间
-            QTableWidgetItem(duration_str),  # 实验时长
-            QTableWidgetItem(sample_temp_str),  # 样品温度
-            QTableWidgetItem(f"{n2_pv:.2f}" if n2_pv is not None else "--"),  # N2
-            QTableWidgetItem(f"{co_pv:.2f}" if co_pv is not None else "--"),  # CO
-            QTableWidgetItem(f"{co2_pv:.2f}" if co2_pv is not None else "--"),  # CO2
-            QTableWidgetItem(f"{h2_pv:.2f}" if h2_pv is not None else "--"),  # H2
-            QTableWidgetItem(f"{weight:.3f}" if weight is not None else "--"),  # 重量
-            QTableWidgetItem(weight_loss_str),  # 失重
-            QTableWidgetItem(weight_loss_rate_str),  # 失重率
-            QTableWidgetItem(experiment_status),  # 实验状态
-            QTableWidgetItem(system_prompt)  # 系统提示
+            QTableWidgetItem(row_data.timestamp_text),  # 时间
+            QTableWidgetItem(row_data.duration_text),  # 实验时长
+            QTableWidgetItem(row_data.sample_temperature_text),  # 样品温度
+            QTableWidgetItem(row_data.flow_texts["N2"]),  # N2
+            QTableWidgetItem(row_data.flow_texts["CO"]),  # CO
+            QTableWidgetItem(row_data.flow_texts["CO2"]),  # CO2
+            QTableWidgetItem(row_data.flow_texts["H2"]),  # H2
+            QTableWidgetItem(row_data.weight_text),  # 重量
+            QTableWidgetItem(row_data.weight_loss_text),  # 失重
+            QTableWidgetItem(row_data.weight_loss_rate_text),  # 失重率
+            QTableWidgetItem(row_data.experiment_status),  # 实验状态
+            QTableWidgetItem(row_data.system_prompt)  # 系统提示
         ]
         
         # 设置表格项
