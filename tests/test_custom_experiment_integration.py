@@ -12,7 +12,7 @@ from unittest.mock import Mock, MagicMock
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.ui.experiment.experiment_controller import ExperimentController
+from src.controllers.experiment_controller import ExperimentController
 from src.services.enhanced_experiment_modes import EnhancedExperimentModeManager
 from src.services.experiment_type_manager import ExperimentTypeManager
 

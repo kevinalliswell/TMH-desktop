@@ -30,7 +30,7 @@ from PySide6.QtGui import QFont
 
 # 导入系统组件
 from src.application.device_service import DeviceService
-from src.ui.experiment.experiment_controller import ExperimentController
+from src.controllers.experiment_controller import ExperimentController
 from src.device_clients.data_handler import DataHandler
 from src.device_clients.device_manager import DeviceManager
 from src.ui.ui_components.control_panel import ControlPanel

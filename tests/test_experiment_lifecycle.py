@@ -17,7 +17,7 @@ from typing import List, Dict, Any
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
-from src.ui.experiment.experiment_controller import ExperimentController
+from src.controllers.experiment_controller import ExperimentController
 from src.services.experiment_modes import ExperimentType, ExperimentStage
 from src.services.experiment_type_manager import ExperimentTypeManager
 from src.services.database import ExperimentData

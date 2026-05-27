@@ -23,7 +23,7 @@ os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 from PySide6.QtCore import QCoreApplication, QTimer
 from PySide6.QtWidgets import QApplication
 
-from src.ui.experiment.experiment_controller import ExperimentController
+from src.controllers.experiment_controller import ExperimentController
 from src.services.experiment_modes import ExperimentType, ExperimentStage
 from src.services.experiment_type_manager import ExperimentTypeManager
 from src.services.database import ExperimentData
