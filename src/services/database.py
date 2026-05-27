@@ -10,8 +10,6 @@ import json
 from src.utils.path_manager import PathManager
 from src.utils.logger import get_logger
 
-database_path = PathManager.get_data_path('experiments.db')
-
 logger = get_logger(__name__)
 
 
@@ -64,7 +62,9 @@ class ExperimentConfig:
 class ExperimentDatabase:
     """实验数据库管理"""
 
-    def __init__(self, db_path: str = database_path):
+    def __init__(self, db_path: str | None = None):
+        if db_path is None:
+            db_path = PathManager.get_data_path('experiments.db')
         """初始化数据库管理器"""
         self.db_path = db_path
         # 确保数据库目录存在
