@@ -72,7 +72,6 @@ TMH1.0.250907/
 ├── configs/                      # 配置文件目录
 │   ├── comm_config.json          # 通信配置
 │   ├── exp_settings.config       # 实验设置配置
-│   ├── exp_settings.configs      # 实验设置配置（备用）
 │   ├── experiment_modes.json     # 实验模式配置
 │   ├── health_monitor.json       # 健康监控配置
 │   └── software.info             # 软件信息
