@@ -230,7 +230,7 @@ pytest
 | PySide6 | Qt GUI 框架 |
 | pyqtgraph | 实时数据图表 |
 | pyserial | 串口通信 |
-| pymodbus | Modbus 协议 |
+| tmh_comm | 自研设备通信协议（本地包） |
 | psutil | 系统性能监控 |
 
 ## GitHub 协作
