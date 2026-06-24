@@ -2,19 +2,39 @@ version: 2
 updates:
   - package-ecosystem: "pip"
     directory: "/"
+    # Integrate dependency updates through develop, not main (Gitflow).
+    target-branch: "develop"
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "type: ci"
+    groups:
+      # Bundle low-risk minor/patch bumps into a single PR; majors stay individual.
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # pandas 3.0 is a major release (Copy-on-Write becomes default, several
+      # APIs removed/renamed). Validate data-export compatibility manually
+      # before adopting; do not auto-bump across the major boundary.
+      - dependency-name: "pandas"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "develop"
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "type: ci"
-
+    groups:
+      github-actions:
+        patterns:
+          - "*"
