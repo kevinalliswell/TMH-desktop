@@ -25,11 +25,21 @@ permissions:
 
 jobs:
   test:
-    name: ci
-    runs-on: ubuntu-latest
+    name: ci (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is the production target; keep Ubuntu for fast feedback and
+        # to catch platform-specific (encoding/path) regressions early.
+        os: [ubuntu-latest, windows-latest]
     env:
       PYTHONPATH: .
       QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: "1"
+      # Disable third-party pytest plugin autoload (e.g. pytest-qt) so the
+      # headless smoke suite does not require a display server.
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -56,4 +66,4 @@ jobs:
         run: python -m compileall src packages/tmh_comm/src scripts tests/ci
 
       - name: Run smoke tests
-        run: PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest --junitxml=.pytest-results/junit.xml
+        run: pytest --junitxml=.pytest-results/junit.xml
