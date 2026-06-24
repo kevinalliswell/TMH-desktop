@@ -252,3 +252,20 @@ cache/
 # 临时目录
 temp/
 tmp/
+
+# === 运行时数据与产物（不纳入版本控制；目录用 .gitkeep 保留）===
+# 实验数据文件（运行时生成，含现场/客户数据）
+data/experiments/*
+!data/experiments/.gitkeep
+*.exp
+# 生成的报告导出
+exports/*
+!exports/.gitkeep
+# 误放进 docs 的实验数据
+docs/*.csv
+# 测试产物
+tests/*.db
+tests/reports/
+# 开发者工作笔记（请改用 GitHub Issues 跟踪）
+/todo
+/codebase review.md
