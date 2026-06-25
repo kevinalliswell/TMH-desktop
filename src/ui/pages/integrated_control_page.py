@@ -34,10 +34,13 @@ class IntegratedControlPage(QWidget):
         experiment_backend=None,
         experiment_api=None,
         device_hub=None,
+        gas_safety_limits=None,
     ):
         super().__init__(parent)
         self.device_manager = device_manager
         self.device_hub = device_hub or device_manager
+        # 可燃气体（H2/CO）流量安全上限，透传给控制面板输入框上界
+        self.gas_safety_limits = gas_safety_limits or {"H2": 5.0, "CO": 5.0}
         self.data_handler = data_handler
         self.experiment_api = experiment_api or ExperimentFacade(
             experiment_backend or ExperimentRuntime(device_manager, data_handler, self)
@@ -105,7 +108,7 @@ class IntegratedControlPage(QWidget):
         splitter.addWidget(left_tab_widget)
 
         # 右侧
-        self.control_panel = ControlPanel()
+        self.control_panel = ControlPanel(gas_safety_limits=self.gas_safety_limits)
         splitter.addWidget(self.control_panel)
 
         splitter.setSizes([900, 300])

@@ -1,11 +1,13 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout,
     QComboBox, QPushButton, QHBoxLayout, QMessageBox,
-    QSpinBox, QLabel, QTabWidget, QToolButton,
+    QSpinBox, QDoubleSpinBox, QLabel, QTabWidget, QToolButton,
+    QInputDialog, QLineEdit,
 )
 from PySide6.QtCore import Qt
 from src.application.services import CommunicationService
 from src.services.comm_settings import CommSettings
+from src.utils.password_manager import PasswordManager
 from src.utils.logger import get_logger
 from typing import Any, Dict
 
@@ -25,10 +27,14 @@ class CommunicationSettings(QWidget):
     ``(device_key, param_name)``，以便刷新、校验和恢复默认值。
     """
 
-    def __init__(self, runtime=None, parent=None, comm_settings=None, communication_service=None, apply_callback=None):
+    def __init__(self, runtime=None, parent=None, comm_settings=None, communication_service=None, apply_callback=None, password_manager=None):
         super().__init__(parent)
         self.logger = get_logger(__name__)
         self.logger.debug("初始化通信设置页面")
+
+        # 管理员口令校验器（用于解锁可燃气体安全上限编辑）
+        self.password_manager = password_manager or PasswordManager()
+        self._safety_unlocked = False
 
         if communication_service is not None:
             self.communication_service = communication_service
@@ -148,6 +154,13 @@ class CommunicationSettings(QWidget):
                 )
             elif param == "sampling_interval":
                 widget.valueChanged.connect(self._update_sampling_interval)
+            elif param == "gas_limit_unlock":
+                widget.clicked.connect(self._on_unlock_safety_limits)
+            elif param.startswith("gas_limit_"):
+                gas = param[len("gas_limit_"):]
+                widget.valueChanged.connect(
+                    lambda v, g=gas: self._update_gas_safety_limit(g, v)
+                )
 
         # 串口刷新按钮
         for (device_key, param), widget in self._widgets.items():
@@ -298,6 +311,37 @@ class CommunicationSettings(QWidget):
         scaling_group.setLayout(scaling_layout)
         parent_layout.addWidget(scaling_group)
 
+        # 可燃气体安全上限（H2/CO）——默认锁定，需管理员解锁后方可修改
+        safety_group = QGroupBox("可燃气体安全上限 (需管理员)")
+        safety_layout = QHBoxLayout()
+        safety_layout.setSpacing(15)
+        safety_layout.setContentsMargins(10, 10, 10, 10)
+
+        gas_limits = self.communication_service.get_gas_safety_limits()
+        for gas in ("H2", "CO"):
+            label = QLabel(f"{gas}:")
+            label.setMinimumWidth(30)
+            spin = QDoubleSpinBox()
+            spin.setRange(0.0, 20.0)
+            spin.setDecimals(1)
+            spin.setSingleStep(0.5)
+            spin.setSuffix(" L/min")
+            spin.setValue(float(gas_limits.get(gas, 5.0)))
+            spin.setMinimumWidth(90)
+            spin.setMinimumHeight(20)
+            spin.setEnabled(False)  # 默认锁定，需管理员解锁
+            self._widgets[("COM_RS485_MFC", f"gas_limit_{gas}")] = spin
+            safety_layout.addWidget(label)
+            safety_layout.addWidget(spin)
+
+        self._safety_unlock_btn = QPushButton("🔒 解锁修改（管理员）")
+        self._safety_unlock_btn.setMinimumHeight(20)
+        self._widgets[("COM_RS485_MFC", "gas_limit_unlock")] = self._safety_unlock_btn
+        safety_layout.addWidget(self._safety_unlock_btn)
+
+        safety_group.setLayout(safety_layout)
+        parent_layout.addWidget(safety_group)
+
     def _build_temp_extra(self, parent_layout: QVBoxLayout):
         """构建温控器从机地址控件"""
 
@@ -425,6 +469,36 @@ class CommunicationSettings(QWidget):
             self.logger.debug(f"更新流量缩放: {gas} = {scale}")
         except Exception as e:
             self.logger.error(f"更新流量缩放失败: {str(e)}")
+
+    def _update_gas_safety_limit(self, gas: str, value: float) -> None:
+        """更新可燃气体流量安全上限（H2/CO）"""
+        try:
+            self.communication_service.update_gas_safety_limit(gas, float(value))
+            self._mark_dirty()
+            self.logger.debug(f"更新可燃气体安全上限: {gas} = {value}")
+        except Exception as e:
+            self.logger.error(f"更新可燃气体安全上限失败: {str(e)}")
+
+    def _on_unlock_safety_limits(self) -> None:
+        """验证管理员密码后解锁可燃气体安全上限编辑"""
+        if self._safety_unlocked:
+            return
+        password, ok = QInputDialog.getText(
+            self, "验证管理员密码", "请输入管理员密码以修改可燃气体安全上限:", QLineEdit.Password
+        )
+        if not ok:
+            return
+        if not self.password_manager.verify_password(password):
+            QMessageBox.warning(self, "警告", "密码错误，无法修改安全上限！")
+            return
+        self._safety_unlocked = True
+        for gas in ("H2", "CO"):
+            spin = self._widgets.get(("COM_RS485_MFC", f"gas_limit_{gas}"))
+            if spin is not None:
+                spin.setEnabled(True)
+        self._safety_unlock_btn.setText("🔓 已解锁")
+        self._safety_unlock_btn.setEnabled(False)
+        self.logger.info("可燃气体安全上限已解锁（管理员）")
 
     def _update_sampling_interval(self, interval: int) -> None:
         """更新采样间隔"""

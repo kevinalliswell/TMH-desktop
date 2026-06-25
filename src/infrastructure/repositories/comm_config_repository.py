@@ -86,6 +86,7 @@ class CommConfigRepository(CommConfigRepositoryPort):
             "SLAVE_ADDRESS_MFC": {"H2": 1, "N2": 2, "CO2": 3, "CO": 4},
             "SLAVE_ADDRESS_TEMP": {"TEMP": 0},
             "FLOW_SCALING": {"H2": 0.1, "N2": 1.0, "CO2": 0.1, "CO": 0.1},
+            "GAS_SAFETY_LIMITS": {"H2": 5.0, "CO": 5.0},
         }
 
     @property
@@ -182,6 +183,9 @@ class CommConfigRepository(CommConfigRepositoryPort):
         if "FLOW_SCALING" not in settings:
             self.logger.warning("缺少流量缩放配置，使用默认值")
             settings["FLOW_SCALING"] = copy.deepcopy(self._defaults["FLOW_SCALING"])
+        if "GAS_SAFETY_LIMITS" not in settings:
+            self.logger.warning("缺少可燃气体安全上限配置，使用默认值")
+            settings["GAS_SAFETY_LIMITS"] = copy.deepcopy(self._defaults["GAS_SAFETY_LIMITS"])
         if "PERFORMANCE_CONFIG" not in settings:
             self.logger.warning("缺少性能配置，使用默认值")
             settings["PERFORMANCE_CONFIG"] = copy.deepcopy(self._defaults["PERFORMANCE_CONFIG"])
@@ -206,6 +210,7 @@ class CommConfigRepository(CommConfigRepositoryPort):
                 serial=self._serial_from_raw(mfc_raw),
                 slave_addresses=copy.deepcopy(raw.get("SLAVE_ADDRESS_MFC", {})),
                 flow_scaling=copy.deepcopy(raw.get("FLOW_SCALING", {})),
+                gas_safety_limits=copy.deepcopy(raw.get("GAS_SAFETY_LIMITS", {})),
             ),
             temperature=TemperatureCommunicationConfig(
                 serial=self._serial_from_raw(temp_raw),
@@ -249,6 +254,7 @@ class CommConfigRepository(CommConfigRepositoryPort):
         raw["SLAVE_ADDRESS_MFC"] = copy.deepcopy(config.mfc.slave_addresses)
         raw["SLAVE_ADDRESS_TEMP"] = {"TEMP": config.temperature.slave_address}
         raw["FLOW_SCALING"] = copy.deepcopy(config.mfc.flow_scaling)
+        raw["GAS_SAFETY_LIMITS"] = copy.deepcopy(config.mfc.gas_safety_limits)
         return raw
 
     def _serial_from_raw(self, raw: dict[str, Any]) -> SerialPortConfig:

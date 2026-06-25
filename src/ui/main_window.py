@@ -180,6 +180,7 @@ class MainWindow(QMainWindow):
             self,
             experiment_api=self.ui_dependencies.experiment_api,
             device_hub=self.runtime_services.device_hub,
+            gas_safety_limits=self.runtime_services.communication_config.mfc.gas_safety_limits,
         )
 
         self.comm_settings_page = CommunicationSettings(
@@ -187,11 +188,13 @@ class MainWindow(QMainWindow):
             parent=self,
             communication_service=self.ui_dependencies.communication_service,
             apply_callback=self._apply_comm_settings,
+            password_manager=self.ui_dependencies.password_manager,
         )
 
         self.experiment_mode_settings_page = ExperimentModeSettingsPage(
             parent=self,
             mode_manager=self.ui_dependencies.experiment_mode_manager,
+            gas_safety_limits=self.runtime_services.communication_config.mfc.gas_safety_limits,
         )
 
         self.history_query_page = HistoryQuery(
