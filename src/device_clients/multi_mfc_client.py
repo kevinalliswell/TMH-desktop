@@ -731,11 +731,14 @@ class MultiMFCClient(BaseDevice):
         """停止设备，覆盖父类方法以提供额外的清理"""
         self.logger.info(f"{self.device_type} 准备停止...")
 
-        # 先让主采集线程退出；它会负责停止命令处理器并关闭串口。
+        # 先停命令处理器：确保没有线程在持锁访问串口。否则当主采集线程 join 超时后，
+        # 基类 close_serial_port() 会把句柄置 None，与仍在运行的命令处理器读写竞态。
+        self._stop_command_processor()
+
+        # 再让主采集线程退出（join 后基类会关闭串口）。
         super().stop()
 
-        # 兜底清理命令处理器和串口。
-        self._stop_command_processor()
+        # 兜底关闭串口。
         with self._serial_lock:
             self.close_serial_port()
 
