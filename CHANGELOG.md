@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 ## [Unreleased]
 
+### Added
+
+- Configurable flammable-gas (H2/CO) flow upper limits (`GAS_SAFETY_LIMITS` in the
+  communication config, default 5 L/min each), editable only after admin-password
+  unlock on the communication settings page.
+
+### Security
+
+- Enforce the H2/CO flow upper limits as a hard clamp before any setpoint is written
+  to the MFC — covering manual control, experiment stages, and programmatic calls.
+  Manual-panel and stage-editor input ranges are synced to the configured limit.
+
 ## [1.2.260624] - 2026-06-24
 
 ### Added

@@ -22,10 +22,13 @@ class ControlPanel(QFrame):
     save_data = Signal()  # 保存数据信号
     reset_experiment = Signal()  # 实验重置信号
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, gas_safety_limits=None):
         super().__init__(parent)
         self.setFrameStyle(QFrame.NoFrame)  # 移除边框
         self.setObjectName("controlPanel")
+
+        # 可燃气体（H2/CO）流量安全上限，驱动输入框上界；缺省 5.0 L/min
+        self.gas_safety_limits = gas_safety_limits or {"H2": 5.0, "CO": 5.0}
 
         layout = QVBoxLayout(self)
         layout.setSpacing(8)  # 减少间距
@@ -63,9 +66,9 @@ class ControlPanel(QFrame):
         # 创建4种气体的控制行，包含不同的调节范围
         gases = [
             ("N2", "氮气", 0.0, 20.0),      # N2: 0-20 L/min
-            ("CO", "一氧化碳", 0.0, 5.0),    # CO: 0-5 L/min
+            ("CO", "一氧化碳", 0.0, float(self.gas_safety_limits.get("CO", 5.0))),    # CO: 安全上限(默认5)
             ("CO2", "二氧化碳", 0.0, 15.0),  # CO2: 0-15 L/min
-            ("H2", "氢气", 0.0, 5.0)         # H2: 0-5 L/min
+            ("H2", "氢气", 0.0, float(self.gas_safety_limits.get("H2", 5.0)))         # H2: 安全上限(默认5)
         ]
         
         self.gas_controls = {}

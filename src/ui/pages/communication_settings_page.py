@@ -1,11 +1,13 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout,
     QComboBox, QPushButton, QHBoxLayout, QMessageBox,
-    QSpinBox, QLabel, QTabWidget, QToolButton,
+    QSpinBox, QDoubleSpinBox, QLabel, QTabWidget, QToolButton,
+    QInputDialog, QLineEdit,
 )
 from PySide6.QtCore import Qt
 from src.application.services import CommunicationService
 from src.services.comm_settings import CommSettings
+from src.utils.password_manager import PasswordManager
 from src.utils.logger import get_logger
 from typing import Any, Dict
 
@@ -25,10 +27,14 @@ class CommunicationSettings(QWidget):
     ``(device_key, param_name)``，以便刷新、校验和恢复默认值。
     """
 
-    def __init__(self, runtime=None, parent=None, comm_settings=None, communication_service=None, apply_callback=None):
+    def __init__(self, runtime=None, parent=None, comm_settings=None, communication_service=None, apply_callback=None, password_manager=None):
         super().__init__(parent)
         self.logger = get_logger(__name__)
         self.logger.debug("初始化通信设置页面")
+
+        # 管理员口令校验器（用于解锁可燃气体安全上限编辑）
+        self.password_manager = password_manager or PasswordManager()
+        self._safety_unlocked = False
 
         if communication_service is not None:
             self.communication_service = communication_service
@@ -85,6 +91,11 @@ class CommunicationSettings(QWidget):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
+        self._test_btn = QPushButton("测试连接")
+        self._test_btn.setMinimumWidth(150)
+        self._test_btn.setMinimumHeight(40)
+        button_layout.addWidget(self._test_btn)
+
         self._reset_btn = QPushButton("恢复默认")
         self._reset_btn.setMinimumWidth(150)
         self._reset_btn.setMinimumHeight(40)
@@ -109,6 +120,7 @@ class CommunicationSettings(QWidget):
 
         self._save_btn.clicked.connect(self._on_save)
         self._reset_btn.clicked.connect(self._on_reset_defaults)
+        self._test_btn.clicked.connect(self._on_test_connection)
 
         # 设备串口参数
         for (device_key, param), widget in self._widgets.items():
@@ -148,6 +160,13 @@ class CommunicationSettings(QWidget):
                 )
             elif param == "sampling_interval":
                 widget.valueChanged.connect(self._update_sampling_interval)
+            elif param == "gas_limit_unlock":
+                widget.clicked.connect(self._on_unlock_safety_limits)
+            elif param.startswith("gas_limit_"):
+                gas = param[len("gas_limit_"):]
+                widget.valueChanged.connect(
+                    lambda v, g=gas: self._update_gas_safety_limit(g, v)
+                )
 
         # 串口刷新按钮
         for (device_key, param), widget in self._widgets.items():
@@ -298,6 +317,37 @@ class CommunicationSettings(QWidget):
         scaling_group.setLayout(scaling_layout)
         parent_layout.addWidget(scaling_group)
 
+        # 可燃气体安全上限（H2/CO）——默认锁定，需管理员解锁后方可修改
+        safety_group = QGroupBox("可燃气体安全上限 (需管理员)")
+        safety_layout = QHBoxLayout()
+        safety_layout.setSpacing(15)
+        safety_layout.setContentsMargins(10, 10, 10, 10)
+
+        gas_limits = self.communication_service.get_gas_safety_limits()
+        for gas in ("H2", "CO"):
+            label = QLabel(f"{gas}:")
+            label.setMinimumWidth(30)
+            spin = QDoubleSpinBox()
+            spin.setRange(0.0, 20.0)
+            spin.setDecimals(1)
+            spin.setSingleStep(0.5)
+            spin.setSuffix(" L/min")
+            spin.setValue(float(gas_limits.get(gas, 5.0)))
+            spin.setMinimumWidth(90)
+            spin.setMinimumHeight(20)
+            spin.setEnabled(False)  # 默认锁定，需管理员解锁
+            self._widgets[("COM_RS485_MFC", f"gas_limit_{gas}")] = spin
+            safety_layout.addWidget(label)
+            safety_layout.addWidget(spin)
+
+        self._safety_unlock_btn = QPushButton("🔒 解锁修改（管理员）")
+        self._safety_unlock_btn.setMinimumHeight(20)
+        self._widgets[("COM_RS485_MFC", "gas_limit_unlock")] = self._safety_unlock_btn
+        safety_layout.addWidget(self._safety_unlock_btn)
+
+        safety_group.setLayout(safety_layout)
+        parent_layout.addWidget(safety_group)
+
     def _build_temp_extra(self, parent_layout: QVBoxLayout):
         """构建温控器从机地址控件"""
 
@@ -426,6 +476,36 @@ class CommunicationSettings(QWidget):
         except Exception as e:
             self.logger.error(f"更新流量缩放失败: {str(e)}")
 
+    def _update_gas_safety_limit(self, gas: str, value: float) -> None:
+        """更新可燃气体流量安全上限（H2/CO）"""
+        try:
+            self.communication_service.update_gas_safety_limit(gas, float(value))
+            self._mark_dirty()
+            self.logger.debug(f"更新可燃气体安全上限: {gas} = {value}")
+        except Exception as e:
+            self.logger.error(f"更新可燃气体安全上限失败: {str(e)}")
+
+    def _on_unlock_safety_limits(self) -> None:
+        """验证管理员密码后解锁可燃气体安全上限编辑"""
+        if self._safety_unlocked:
+            return
+        password, ok = QInputDialog.getText(
+            self, "验证管理员密码", "请输入管理员密码以修改可燃气体安全上限:", QLineEdit.Password
+        )
+        if not ok:
+            return
+        if not self.password_manager.verify_password(password):
+            QMessageBox.warning(self, "警告", "密码错误，无法修改安全上限！")
+            return
+        self._safety_unlocked = True
+        for gas in ("H2", "CO"):
+            spin = self._widgets.get(("COM_RS485_MFC", f"gas_limit_{gas}"))
+            if spin is not None:
+                spin.setEnabled(True)
+        self._safety_unlock_btn.setText("🔓 已解锁")
+        self._safety_unlock_btn.setEnabled(False)
+        self.logger.info("可燃气体安全上限已解锁（管理员）")
+
     def _update_sampling_interval(self, interval: int) -> None:
         """更新采样间隔"""
         try:
@@ -438,6 +518,47 @@ class CommunicationSettings(QWidget):
     # ------------------------------------------------------------------
     # 保存 / 恢复默认
     # ------------------------------------------------------------------
+    def _on_test_connection(self) -> None:
+        """通讯自检：读取后端设备的实时连接状态，逐设备给出明确结果。
+
+        非侵入式——直接读取正在运行的设备线程状态，不另开串口（避免与运行中的
+        采集线程抢占端口）。因此反映的是"已保存并应用"的配置。
+        """
+        import time
+
+        runtime = self.runtime
+        if not runtime or not getattr(runtime, "is_started", False):
+            QMessageBox.information(self, "测试连接", "后端服务未启动，无法测试连接。")
+            return
+        try:
+            statuses = runtime.services.device_hub.get_all_status()
+        except Exception as exc:
+            self.logger.error(f"获取设备状态失败: {exc}")
+            QMessageBox.warning(self, "测试连接", f"无法获取设备状态：{exc}")
+            return
+
+        now = time.time()
+        name_cn = {"Balance": "电子天平", "Temp": "温度控制器", "MFC": "气体流量计"}
+        lines = []
+        for name, st in statuses.items():
+            cn = name_cn.get(name, name)
+            ts = st.get("last_update_ts")
+            connected = st.get("connected")
+            running = st.get("running")
+            if connected and ts is not None and (now - ts) < 10:
+                lines.append(f"✓ {cn}：通讯正常（最近数据 {now - ts:.1f}s 前）")
+            elif connected or running:
+                lines.append(f"⚠ {cn}：端口已打开但无最新数据（检查从机地址/接线/设备上电）")
+            else:
+                lines.append(f"✗ {cn}：未连接（检查串口号/波特率/接线）")
+
+        if self._dirty:
+            lines.append("")
+            lines.append("注意：当前有未保存的修改；本结果反映的是已应用的配置，"
+                         "如需测试新参数请先点「保存设置」。")
+        QMessageBox.information(self, "通讯自检结果",
+                                "\n".join(lines) if lines else "无已注册设备。")
+
     def _on_save(self) -> None:
         """保存设置到配置文件"""
         try:

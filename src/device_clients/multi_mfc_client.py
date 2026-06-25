@@ -92,6 +92,10 @@ class MultiMFCClient(BaseDevice):
         self.logger.info(f"已配置MFC设备: {', '.join(self.slave_addresses.keys())}")
         self.logger.info(f"流量缩放配置: {self.flow_scaling}")
 
+        # 可燃气体（H2/CO）流量安全上限（L/min）——下发前硬钳制，缺省 5.0
+        self.gas_safety_limits = self.config.get("GAS_SAFETY_LIMITS", {}) or {"H2": 5.0, "CO": 5.0}
+        self.logger.info(f"可燃气体流量安全上限: {self.gas_safety_limits}")
+
         # 移除模拟数据相关变量，专注实时数据采集
 
         # 数据存储 - 使用线程安全的字典
@@ -540,7 +544,10 @@ class MultiMFCClient(BaseDevice):
             return False
 
         slave_address = self.slave_addresses[gas_type]
-        
+
+        # 安全上限硬钳制（可燃气体 H2/CO）——手动/实验/程序所有路径下发前的最终关口
+        value = self._clamp_flow(gas_type, value)
+
         # 获取该气体的缩放系数
         scaling_factor = self._get_scaling_factor(gas_type)
         # 缩放逻辑：设备值 = 输入值 / 缩放系数
@@ -602,6 +609,22 @@ class MultiMFCClient(BaseDevice):
             self.logger.warning(f"未找到 {gas_type} 的缩放配置，使用默认值 0.1")
             return 0.1
         return scaling_factor
+
+    def _clamp_flow(self, gas_type: str, value: float) -> float:
+        """将流量裁剪到配置的安全上限以内（仅作用于配置中存在的气体，如 H2/CO）。
+
+        仅设上界，0 <= limit 恒通过，不影响安全气氛归零。
+        """
+        try:
+            limit = self.gas_safety_limits.get(gas_type)
+        except AttributeError:
+            limit = None
+        if limit is not None and value > limit:
+            self.logger.warning(
+                f"{gas_type} 流量 {value} L/min 超过安全上限 {limit} L/min，已钳制为 {limit}"
+            )
+            return float(limit)
+        return value
 
     def run(self):
         """设备主循环（增强版：持续重连机制 + 智能休眠）"""

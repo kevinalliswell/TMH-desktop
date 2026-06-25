@@ -21,9 +21,11 @@ from src.services.experiment_modes import ExperimentModeManager
 class StageEditDialog(QDialog):
     """阶段编辑对话框"""
     
-    def __init__(self, stage_data=None, parent=None):
+    def __init__(self, stage_data=None, parent=None, gas_safety_limits=None):
         super().__init__(parent)
         self.stage_data = stage_data or {}
+        # 可燃气体（H2/CO）流量安全上限，驱动输入框上界；缺省 5.0 L/min
+        self.gas_safety_limits = gas_safety_limits or {"H2": 5.0, "CO": 5.0}
         self.setWindowTitle("编辑实验阶段")
         self.setModal(True)
         self.resize(500, 400)
@@ -74,7 +76,7 @@ class StageEditDialog(QDialog):
         gas_layout = QFormLayout()
         
         self.co_flow_spin = QDoubleSpinBox()
-        self.co_flow_spin.setRange(0, 15)
+        self.co_flow_spin.setRange(0, float(self.gas_safety_limits.get("CO", 5.0)))
         self.co_flow_spin.setSuffix(" L/min")
         gas_layout.addRow("CO流量:", self.co_flow_spin)
         
@@ -89,7 +91,7 @@ class StageEditDialog(QDialog):
         gas_layout.addRow("N₂流量:", self.n2_flow_spin)
         
         self.h2_flow_spin = QDoubleSpinBox()
-        self.h2_flow_spin.setRange(0, 15)
+        self.h2_flow_spin.setRange(0, float(self.gas_safety_limits.get("H2", 5.0)))
         self.h2_flow_spin.setSuffix(" L/min")
         gas_layout.addRow("H₂流量:", self.h2_flow_spin)
         
@@ -148,8 +150,10 @@ class ExperimentModeSettingsPage(QWidget):
     mode_updated = Signal(str, dict)   # (mode_id, mode_data)
     mode_deleted = Signal(str)         # (mode_id,)
     
-    def __init__(self, parent=None, mode_manager=None):
+    def __init__(self, parent=None, mode_manager=None, gas_safety_limits=None):
         super().__init__(parent)
+        # 可燃气体（H2/CO）流量安全上限，传递给阶段编辑对话框；缺省 5.0 L/min
+        self.gas_safety_limits = gas_safety_limits or {"H2": 5.0, "CO": 5.0}
         self.setWindowTitle("实验模式设置")
         
         # 实验模式管理器
@@ -626,7 +630,7 @@ class ExperimentModeSettingsPage(QWidget):
         if self.current_mode_type != 'custom':
             return
         
-        dialog = StageEditDialog(parent=self)
+        dialog = StageEditDialog(parent=self, gas_safety_limits=self.gas_safety_limits)
         if dialog.exec() == QDialog.Accepted:
             stage_data = dialog.get_stage_data()
             
@@ -663,7 +667,7 @@ class ExperimentModeSettingsPage(QWidget):
         if not stage_data:
             return
         
-        dialog = StageEditDialog(stage_data, parent=self)
+        dialog = StageEditDialog(stage_data, parent=self, gas_safety_limits=self.gas_safety_limits)
         if dialog.exec() == QDialog.Accepted:
             new_stage_data = dialog.get_stage_data()
             

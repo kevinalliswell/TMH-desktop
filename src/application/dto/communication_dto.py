@@ -38,6 +38,9 @@ class MfcCommunicationConfig:
     serial: SerialPortConfig
     slave_addresses: dict[str, int] = field(default_factory=dict)
     flow_scaling: dict[str, float] = field(default_factory=dict)
+    # Upper flow limits (L/min) for flammable gases (H2/CO). Enforced as a hard
+    # clamp before any setpoint is written to the MFC; editable only by admin.
+    gas_safety_limits: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass

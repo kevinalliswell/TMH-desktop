@@ -61,6 +61,10 @@ class CommunicationService:
         self._settings.setdefault("FLOW_SCALING", {})
         self._settings["FLOW_SCALING"][gas] = scale
 
+    def update_gas_safety_limit(self, gas: str, value: float) -> None:
+        self._settings.setdefault("GAS_SAFETY_LIMITS", {})
+        self._settings["GAS_SAFETY_LIMITS"][gas] = float(value)
+
     def update_sampling_interval(self, interval: int) -> None:
         sampling_config = self.get_sampling_config()
         sampling_config["interval_s"] = float(interval)
@@ -82,6 +86,9 @@ class CommunicationService:
 
     def get_flow_scaling(self) -> dict[str, float]:
         return self._settings.get("FLOW_SCALING", {})
+
+    def get_gas_safety_limits(self) -> dict[str, float]:
+        return self._settings.get("GAS_SAFETY_LIMITS", {})
 
     def get_temp_channels(self) -> list[str]:
         return self.get_temp_config().get("TEMP_CHANNELS", [])

@@ -444,6 +444,7 @@ def _communication_config_to_legacy_raw(config: CommunicationConfig) -> dict[str
         "SLAVE_ADDRESS_MFC": dict(config.mfc.slave_addresses),
         "SLAVE_ADDRESS_TEMP": {"TEMP": config.temperature.slave_address},
         "FLOW_SCALING": dict(config.mfc.flow_scaling),
+        "GAS_SAFETY_LIMITS": dict(config.mfc.gas_safety_limits),
     }
 
 
