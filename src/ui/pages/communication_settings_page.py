@@ -91,6 +91,11 @@ class CommunicationSettings(QWidget):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
+        self._test_btn = QPushButton("测试连接")
+        self._test_btn.setMinimumWidth(150)
+        self._test_btn.setMinimumHeight(40)
+        button_layout.addWidget(self._test_btn)
+
         self._reset_btn = QPushButton("恢复默认")
         self._reset_btn.setMinimumWidth(150)
         self._reset_btn.setMinimumHeight(40)
@@ -115,6 +120,7 @@ class CommunicationSettings(QWidget):
 
         self._save_btn.clicked.connect(self._on_save)
         self._reset_btn.clicked.connect(self._on_reset_defaults)
+        self._test_btn.clicked.connect(self._on_test_connection)
 
         # 设备串口参数
         for (device_key, param), widget in self._widgets.items():
@@ -512,6 +518,47 @@ class CommunicationSettings(QWidget):
     # ------------------------------------------------------------------
     # 保存 / 恢复默认
     # ------------------------------------------------------------------
+    def _on_test_connection(self) -> None:
+        """通讯自检：读取后端设备的实时连接状态，逐设备给出明确结果。
+
+        非侵入式——直接读取正在运行的设备线程状态，不另开串口（避免与运行中的
+        采集线程抢占端口）。因此反映的是"已保存并应用"的配置。
+        """
+        import time
+
+        runtime = self.runtime
+        if not runtime or not getattr(runtime, "is_started", False):
+            QMessageBox.information(self, "测试连接", "后端服务未启动，无法测试连接。")
+            return
+        try:
+            statuses = runtime.services.device_hub.get_all_status()
+        except Exception as exc:
+            self.logger.error(f"获取设备状态失败: {exc}")
+            QMessageBox.warning(self, "测试连接", f"无法获取设备状态：{exc}")
+            return
+
+        now = time.time()
+        name_cn = {"Balance": "电子天平", "Temp": "温度控制器", "MFC": "气体流量计"}
+        lines = []
+        for name, st in statuses.items():
+            cn = name_cn.get(name, name)
+            ts = st.get("last_update_ts")
+            connected = st.get("connected")
+            running = st.get("running")
+            if connected and ts is not None and (now - ts) < 10:
+                lines.append(f"✓ {cn}：通讯正常（最近数据 {now - ts:.1f}s 前）")
+            elif connected or running:
+                lines.append(f"⚠ {cn}：端口已打开但无最新数据（检查从机地址/接线/设备上电）")
+            else:
+                lines.append(f"✗ {cn}：未连接（检查串口号/波特率/接线）")
+
+        if self._dirty:
+            lines.append("")
+            lines.append("注意：当前有未保存的修改；本结果反映的是已应用的配置，"
+                         "如需测试新参数请先点「保存设置」。")
+        QMessageBox.information(self, "通讯自检结果",
+                                "\n".join(lines) if lines else "无已注册设备。")
+
     def _on_save(self) -> None:
         """保存设置到配置文件"""
         try:
