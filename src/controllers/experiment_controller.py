@@ -368,9 +368,11 @@ class ExperimentController(QObject):
         
         return status
 
-    def _create_experiment_record(self) -> ExperimentData:
+    def _create_experiment_record(
+        self, experiment_record: ExperimentData | None = None
+    ) -> ExperimentData:
         """创建实验数据记录（提取公共逻辑）"""
-        experiment = ExperimentData(
+        experiment = experiment_record or ExperimentData(
             experiment_id=str(uuid.uuid4()),
             experiment_name=self.experiment_params["name"],
             sample_name=self.experiment_params["sample_name"],
@@ -450,7 +452,7 @@ class ExperimentController(QObject):
         self.status_updated.emit(f"{status_prefix}-{exp_name}")
         self.system_message_updated.emit(system_message)
 
-    def start_experiment(self) -> bool:
+    def start_experiment(self, experiment_record: ExperimentData | None = None) -> bool:
         """
         开始自动实验
         
@@ -476,7 +478,7 @@ class ExperimentController(QObject):
             self._sm.transition_to(ExperimentPhase.CONFIGURING)
 
             # 创建实验数据对象
-            self.current_experiment = self._create_experiment_record()
+            self.current_experiment = self._create_experiment_record(experiment_record)
             self.experiment_mode_manager.current_stage_index = 0
 
             # 执行公共启动逻辑（内部会转到 RUNNING）
@@ -546,10 +548,10 @@ class ExperimentController(QObject):
                 self._sm.reset()
             return False
     
-    def stop_experiment(self) -> None:
+    def stop_experiment(self) -> bool:
         """停止自动实验"""
         if not self._sm.is_running:
-            return
+            return False
 
         self._finish_experiment_common(
             "实验已停止", "用户手动停止实验",
@@ -557,6 +559,7 @@ class ExperimentController(QObject):
         )
         self.experiment_stopped.emit()
         self.logger.info("实验已停止")
+        return True
     
     def execute_current_experiment_stage(self) -> None:
         """执行当前实验阶段"""
@@ -755,7 +758,11 @@ class ExperimentController(QObject):
                     return False
             
             if self.device_manager:
-                self.device_manager.tare_balance()
+                tare_success = self.device_manager.tare_balance()
+                if not tare_success:
+                    self.logger.warning("天平清零失败，设备未确认去皮命令")
+                    self.system_message_updated.emit("天平清零失败，设备未确认去皮命令")
+                    return False
                 
                 # 天平清零后，将初始重量设为0（因为天平已清零）
                 self.set_initial_weight(0.0)
