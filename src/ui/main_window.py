@@ -228,23 +228,19 @@ class MainWindow(QMainWindow):
                 self.runtime_services.data_handler,
                 self.ui_dependencies.experiment_api,
                 device_hub=self.runtime_services.device_hub,
+                gas_safety_limits=self.runtime_services.communication_config.mfc.gas_safety_limits,
             )
 
     # ==============================
     # 通信状态
     # ==============================
     def _on_comm_status_updated(self, is_connected: bool, device_names: str, error_msg: str):
+        # 通信状态仅在状态栏显示（标题栏不再重复展示）
         if is_connected and not error_msg:
-            # 全部连接
-            self.title_bar.update_communication_status(True, device_names)
             self.status_bar.set_message(f"已连接设备: {device_names}", "ok")
         elif is_connected and error_msg:
-            # 部分连接
-            self.title_bar.update_communication_status(True, device_names, error_msg)
             self.status_bar.set_message(f"已连接: {device_names} | 异常: {error_msg}", "error")
         else:
-            # 全部断开
-            self.title_bar.update_communication_status(False, "", error_msg)
             self.status_bar.set_message(
                 f"设备状态: {error_msg}" if error_msg else "没有设备连接", "error"
             )
