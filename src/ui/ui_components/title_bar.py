@@ -129,14 +129,8 @@ class TitleBar(QWidget):
         right_layout = QHBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(15)
-        
-        # 通信状态
-        self.comm_status = QLabel("未连接")
-        self.comm_status.setObjectName("commStatus")
-        self.comm_status.setAlignment(Qt.AlignCenter)
-        self.comm_status.setFixedHeight(40)
-        right_layout.addWidget(self.comm_status)
-        
+
+        # 通信状态改为仅在状态栏显示，标题栏不再重复展示
         # 系统时间
         self.time_display = QLabel()
         self.time_display.setObjectName("timeDisplay")
@@ -166,44 +160,6 @@ class TitleBar(QWidget):
     # ==============================
     # 功能函数
     # ==============================
-    _MAX_STATUS_LEN = 36  # label 显示文本的最大字符数
-
-    def update_communication_status(self, is_connected: bool, device_name: str = "", error_message: str = ""):
-        """更新通信状态
-
-        状态语义：
-        - is_connected=True  + error_message=""    -> connected  (全部连接，绿色)
-        - is_connected=True  + error_message 非空  -> partial    (部分连接，橙色)
-        - is_connected=False + error_message 非空  -> error      (错误，红色)
-        - is_connected=False + error_message=""    -> disconnected (未连接，灰色)
-        """
-        if is_connected and not error_message:
-            status_text = f"已连接 {device_name}" if device_name else "已连接"
-            status_key = "connected"
-        elif is_connected and error_message:
-            status_text = f"部分连接 {device_name}" if device_name else "部分连接"
-            status_key = "partial"
-        elif error_message:
-            status_text = f"连接错误: {error_message}"
-            status_key = "error"
-        else:
-            status_text = "未连接"
-            status_key = "disconnected"
-
-        # 长文本保护：label 截断 + tooltip 显示完整内容
-        if len(status_text) > self._MAX_STATUS_LEN:
-            self.comm_status.setToolTip(status_text)
-            status_text = status_text[:self._MAX_STATUS_LEN - 1] + "…"
-        else:
-            self.comm_status.setToolTip("")
-
-        self.comm_status.setText(status_text)
-        self.comm_status.setProperty("status", status_key)
-
-        # 刷新样式
-        self.comm_status.style().unpolish(self.comm_status)
-        self.comm_status.style().polish(self.comm_status)
-
     def update_theme_style(self):
         """根据当前主题更新标题栏样式"""
         # 主题样式现在由主窗口的样式表控制

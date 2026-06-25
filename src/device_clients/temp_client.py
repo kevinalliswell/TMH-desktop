@@ -170,30 +170,35 @@ class TempClient(BaseDevice):
             # 发送命令并接收响应
             response = self._send_command(command)
 
-            # 解析响应
-            if response and len(response) >= 3:
-                address = response[0]
-                function_code = response[1]
-                if address == self.slave_address and function_code == 0x03:
-                    scale = self.port_config.get("scale", 0.1)
-                    parsed = self._rtu.parse_read_all(response, scale=scale)
-                    for point in self.TEMP_POINTS:
-                        if point in parsed:
-                            result[point] = parsed[point]
-                            info = self.TEMP_POINTS[point]
-                            self.logger.debug(f"读取 {info['description']}: {result[point]}{info['unit']}")
+            # 解析响应：在缓冲中定位 CRC 校验通过的 0x03 响应帧，
+            # 跳过半双工 RS485 适配器可能回显的请求字节/噪声。
+            frame = (
+                self._rtu.extract_read_all(response, slave_address=self.slave_address)
+                if response else None
+            )
+            if frame is not None:
+                scale = self.port_config.get("scale", 0.1)
+                parsed = self._rtu.parse_read_all(frame, scale=scale)
+                for point in self.TEMP_POINTS:
+                    if point in parsed:
+                        result[point] = parsed[point]
+                        info = self.TEMP_POINTS[point]
+                        self.logger.debug(f"读取 {info['description']}: {result[point]}{info['unit']}")
 
-                    # 更新统计信息
-                    self._read_counter += 1
-                    
-                    # 更新最后读取的数据
-                    with self._data_lock:
-                        self._last_temperature_data = result.copy()
-                        
-                    self.logger.debug("成功读取温度数据")
-                else:
-                    self.logger.warning("收到的响应格式不正确或不完整")
-                    self._error_counter += 1
+                # 更新统计信息
+                self._read_counter += 1
+
+                # 更新最后读取的数据
+                with self._data_lock:
+                    self._last_temperature_data = result.copy()
+
+                self.logger.debug("成功读取温度数据")
+            elif response:
+                # 收到了字节但没有有效帧——回显/噪声/地址或校验不匹配，打印原始字节便于现场排查
+                self.logger.warning(
+                    f"未找到有效温控响应帧(可能为回显/噪声/地址或校验不匹配): {response.hex(' ')}"
+                )
+                self._error_counter += 1
             else:
                 self.logger.warning("未收到有效响应")
                 self._error_counter += 1

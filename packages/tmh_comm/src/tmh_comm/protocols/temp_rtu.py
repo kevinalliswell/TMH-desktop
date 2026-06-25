@@ -38,3 +38,27 @@ class TempRtuProtocol:
             temps[f"T{(i // 2) + 1}"] = raw * scale
         return temps
 
+    def extract_read_all(self, buf: bytes, *, slave_address: int) -> Optional[bytes]:
+        """Locate a CRC-valid 'read holding registers' (func 0x03) response frame for
+        the given slave inside ``buf``.
+
+        Skips any leading echo of the request or line noise (some half-duplex RS485
+        adapters echo what was transmitted, which would otherwise be mis-parsed as a
+        zero-length response). Returns the framed bytes ``[addr,0x03,bc,data,crc]`` or
+        ``None`` if no valid frame is present.
+        """
+        func = 0x03
+        for i in range(0, max(0, len(buf) - 4)):
+            if buf[i] != slave_address or buf[i + 1] != func:
+                continue
+            byte_count = buf[i + 2]
+            if byte_count == 0:
+                continue  # e.g. an echoed request has 0x00 here
+            end = i + 3 + byte_count + 2  # data + CRC16
+            if end > len(buf):
+                continue
+            frame = buf[i:end]
+            if _crc16_modbus(frame[:-2]) == frame[-2:]:
+                return frame
+        return None
+

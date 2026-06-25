@@ -146,7 +146,8 @@ class IntegratedControlPage(QWidget):
             self.control_panel.set_initial_weight.connect(self.handle_set_initial_weight)   # 监听信号，处理设置初始重量逻辑
             self._control_panel_signals_connected = True
 
-    def rebind_runtime(self, device_manager, data_handler, experiment_api, device_hub=None) -> None:
+    def rebind_runtime(self, device_manager, data_handler, experiment_api, device_hub=None,
+                       gas_safety_limits=None) -> None:
         """Refresh runtime-backed dependencies after AppRuntime restart."""
         if (
             self.experiment_api
@@ -192,6 +193,12 @@ class IntegratedControlPage(QWidget):
         self.workflow_service.device_manager = self.device_hub
         self.workflow_service.experiment_api = self.experiment_api
         self.presenter.experiment_api = self.experiment_api
+
+        # 通信配置应用后刷新手动控制面板的可燃气体上限
+        if gas_safety_limits:
+            self.gas_safety_limits = dict(gas_safety_limits)
+            if getattr(self, "control_panel", None) is not None:
+                self.control_panel.set_gas_limits(self.gas_safety_limits)
 
         self._connect_signals()
 

@@ -6,6 +6,24 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 ## [Unreleased]
 
+### Changed
+
+- Manual gas control panel now caps H2/CO input at the configured safety limit and
+  refreshes the cap after the limit is changed and applied (previously fixed at 5 L/min).
+- Device communication status is shown only in the status bar; the duplicate
+  title-bar indicator was removed.
+
+### Fixed
+
+- Temperature controller: locate the CRC-valid Modbus `0x03` response frame and skip any
+  echoed request / line noise from half-duplex RS485 adapters (such echo was previously
+  mis-parsed as an all-empty reading). Raw bytes are now logged when no valid frame is
+  found, to aid field diagnosis.
+
+### Documentation
+
+- Add the field commissioning & installation guide (`docs/现场调试与装机说明.md`).
+
 ## [1.3.260625] - 2026-06-25
 
 ### Added

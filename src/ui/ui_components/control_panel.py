@@ -189,7 +189,19 @@ class ControlPanel(QFrame):
         self.reset_btn.clicked.connect(self.reset_experiment.emit)
 
         layout.addStretch()
-    
+
+    def set_gas_limits(self, limits: dict) -> None:
+        """更新可燃气体(H2/CO)输入框上限，跟随配置的安全上限（管理员修改并应用后刷新）。"""
+        if not limits:
+            return
+        self.gas_safety_limits = dict(limits)
+        for gas in ("H2", "CO"):
+            if gas in limits and gas in self.gas_controls:
+                new_max = float(limits[gas])
+                self.gas_controls[gas]['max_val'] = new_max
+                # setMaximum 会自动把超出的当前值钳到上限
+                self.gas_controls[gas]['input'].setMaximum(new_max)
+
     def _on_gas_set_clicked(self, gas_symbol: str):
         """
         处理气体设置按钮点击事件
