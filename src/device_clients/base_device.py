@@ -218,10 +218,7 @@ class BaseDevice(threading.Thread, ABC):
         self.stop_event.set()
         self.logger.debug(f"{self.device_type} 设备线程停止中...")
 
-        # 关闭串口连接
-        self.close_serial_port()
-
-        # 等待线程结束，但不超过5秒
+        # 先等待采集线程退出，再关闭串口；避免线程仍在串口读写时句柄被提前关闭。
         if self.is_alive():
             self.join(timeout=5.0)
 
@@ -229,6 +226,8 @@ class BaseDevice(threading.Thread, ABC):
             self.logger.warning(f"{self.device_type} 设备线程未能在预期时间内停止")
         else:
             self.logger.debug(f"{self.device_type} 设备线程已停止")
+
+        self.close_serial_port()
             
     @contextmanager
     def create_serial_port(self, port=None, baudrate=None, bytesize=None, parity=None, stopbits=None, xonxoff=None):

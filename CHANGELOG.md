@@ -6,6 +6,22 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 ## [Unreleased]
 
+## [1.5.260625] - 2026-06-25
+
+### Fixed
+
+- Balance tare now propagates the real device command result through the experiment
+  controller, so the UI no longer reports success or resets the initial weight when
+  the instrument does not confirm the tare command.
+- Manual balance tare and initial-weight actions now prepare the experiment controller
+  with UI interaction callbacks before sending device commands, preserving the
+  confirmation dialog even before an experiment has been initialized.
+- Balance serial reads are now synchronized between the background acquisition thread
+  and tare commands, preventing the acquisition loop from consuming the instrument's
+  tare acknowledgement during UI button operation.
+- Added CI coverage for balance tare response parsing, controller failure handling,
+  presenter-side controller preparation, and tare command serial locking.
+
 ## [1.4.260625] - 2026-06-25
 
 ### Changed

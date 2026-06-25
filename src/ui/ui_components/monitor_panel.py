@@ -12,6 +12,18 @@ class MonitorPanel(QFrame):
     - 次要信息：T1-T6温度（小字体一行显示）
     """
 
+    TEMP_DISPLAY_LABELS = {
+        "T1": "PV1",
+        "T2": "SV1",
+        "T3": "PV2",
+        "T4": "SV2",
+        "T5": "PV3",
+        "T6": "SV3",
+        "T7": "T7",
+        "T8": "T8",
+        "T9": "T9",
+    }
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.labels = {}
@@ -257,17 +269,17 @@ class MonitorPanel(QFrame):
         temps = snapshot.temperatures
         if temps:
             for name, val in temps.items():
-                if name in self.labels:
+                label_key = self.TEMP_DISPLAY_LABELS.get(name, name)
+                if label_key in self.labels:
                     if val is not None:
-                        if name in ["T7", "T8", "T9"]:  # 主要温度
-                            self.labels[name].setText(f"{val:.1f}")
-                        else:  # 次要温度
-                            self.labels[name].setText(f"{val:.1f}")
+                        self.labels[label_key].setText(f"{val:.1f}")
                     else:
-                        self.labels[name].setText("--")
+                        self.labels[label_key].setText("--")
         else:
             # 当没有温度数据时，设置所有温度标签为 "--"
-            temp_labels = ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9"]
+            temp_labels = [
+                "PV1", "SV1", "PV2", "SV2", "PV3", "SV3", "T7", "T8", "T9"
+            ]
             for name in temp_labels:
                 if name in self.labels:
                     self.labels[name].setText("--")
