@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 ## [Unreleased]
 
+## [1.4.260625] - 2026-06-25
+
 ### Changed
 
 - Manual gas control panel now caps H2/CO input at the configured safety limit and
