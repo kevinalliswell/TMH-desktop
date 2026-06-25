@@ -132,7 +132,22 @@ class ExperimentWorkflowService:
                 experiment_file_path=start_record.experiment_file_path,
             )
 
-        if not self.experiment_api.start_experiment():
+        try:
+            started = self.experiment_api.start_experiment(start_record.experiment_data)
+        except Exception as exc:
+            # 任何异常路径也要清理预创建的 .exp 文件，避免残留孤儿文件。
+            self._remove_startup_file(start_record.experiment_file_path)
+            self.logger.error(f"启动实验异常: {exc}")
+            return ExperimentStartResult(
+                False,
+                f"启动实验异常：{exc}",
+                experiment_id=start_record.experiment_id,
+                experiment_data=start_record.experiment_data,
+                experiment_file_path=start_record.experiment_file_path,
+            )
+
+        if not started:
+            self._remove_startup_file(start_record.experiment_file_path)
             return ExperimentStartResult(
                 False,
                 "启动实验失败！",
@@ -149,6 +164,17 @@ class ExperimentWorkflowService:
             experiment_data=start_record.experiment_data,
             experiment_file_path=start_record.experiment_file_path,
         )
+
+    def _remove_startup_file(self, filepath: str | None) -> None:
+        """Remove a pre-created experiment file after startup fails."""
+        if not filepath:
+            return
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                self.logger.info(f"已清理启动失败产生的实验文件: {filepath}")
+        except OSError as exc:
+            self.logger.warning(f"清理启动失败实验文件失败: {exc}")
 
     def stop_experiment(self) -> ExperimentCommandResult:
         """Stop the running experiment."""

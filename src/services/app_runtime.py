@@ -131,19 +131,19 @@ class AppRuntime(QObject):
             except Exception as e:
                 self.logger.error(f"清理实验运行时出错: {e}")
 
+        # 先停止数据处理器，避免关闭设备串口时采集线程仍在读取
+        if self.data_handler:
+            try:
+                self.data_handler.stop()
+            except Exception as e:
+                self.logger.error(f"关闭数据处理器出错: {e}")
+
         # 停止设备管理器
         if self.device_manager:
             try:
                 self.device_manager.stop_all()
             except Exception as e:
                 self.logger.error(f"关闭设备管理器出错: {e}")
-
-        # 停止数据处理器
-        if self.data_handler:
-            try:
-                self.data_handler.stop()
-            except Exception as e:
-                self.logger.error(f"关闭数据处理器出错: {e}")
 
         self.device_manager = None
         self.device_hub = None
