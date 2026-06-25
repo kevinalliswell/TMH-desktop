@@ -419,6 +419,7 @@ class CommunicationSettings(QWidget):
             return
 
         current_text = port_combo.currentText()
+        current_setting = self.communication_service.get_settings().get(device_key, {}).get("port")
         port_combo.blockSignals(True)
         port_combo.clear()
         available_ports = self.communication_service.get_available_ports()
@@ -428,6 +429,10 @@ class CommunicationSettings(QWidget):
         elif available_ports:
             port_combo.setCurrentText(available_ports[0])
         port_combo.blockSignals(False)
+        selected_port = port_combo.currentText()
+        if selected_port and selected_port != current_setting:
+            self.communication_service.update_serial_setting(device_key, "port", selected_port)
+            self._mark_dirty()
         self.logger.debug(f"已刷新 {device_key} 串口列表: {available_ports}")
 
     # ------------------------------------------------------------------
@@ -518,6 +523,52 @@ class CommunicationSettings(QWidget):
     # ------------------------------------------------------------------
     # 保存 / 恢复默认
     # ------------------------------------------------------------------
+    def _sync_widgets_to_settings(self) -> None:
+        """保存前以界面当前值为准同步配置草稿。"""
+
+        for (device_key, param), widget in self._widgets.items():
+            if param == "port_refresh" or param == "gas_limit_unlock":
+                continue
+
+            try:
+                if param == "port" and isinstance(widget, QComboBox):
+                    self.communication_service.update_serial_setting(
+                        device_key, "port", widget.currentText()
+                    )
+                elif param == "baudrate" and isinstance(widget, QComboBox):
+                    self.communication_service.update_serial_setting(
+                        device_key, "baudrate", int(widget.currentText())
+                    )
+                elif param == "bytesize" and isinstance(widget, QComboBox):
+                    self.communication_service.update_serial_setting(
+                        device_key, "bytesize", int(widget.currentText())
+                    )
+                elif param == "parity" and isinstance(widget, QComboBox):
+                    parity = _PARITY_REVERSE.get(widget.currentText(), widget.currentText())
+                    self.communication_service.update_serial_setting(
+                        device_key, "parity", parity
+                    )
+                elif param == "stopbits" and isinstance(widget, QComboBox):
+                    self.communication_service.update_serial_setting(
+                        device_key, "stopbits", float(widget.currentText())
+                    )
+                elif param == "temp_slave" and isinstance(widget, QSpinBox):
+                    self.communication_service.update_temp_slave_address(widget.value())
+                elif param.startswith("mfc_slave_") and isinstance(widget, QSpinBox):
+                    gas = param[len("mfc_slave_"):]
+                    self.communication_service.update_mfc_slave_address(gas, widget.value())
+                elif param.startswith("flow_scale_") and isinstance(widget, QSpinBox):
+                    gas = param[len("flow_scale_"):]
+                    self.communication_service.update_flow_scaling(gas, widget.value() / 100.0)
+                elif param.startswith("gas_limit_") and isinstance(widget, QDoubleSpinBox):
+                    gas = param[len("gas_limit_"):]
+                    self.communication_service.update_gas_safety_limit(gas, widget.value())
+                elif param == "sampling_interval" and isinstance(widget, QSpinBox):
+                    self.communication_service.update_sampling_interval(widget.value())
+            except Exception as exc:
+                self.logger.error(f"同步界面配置失败 ({device_key}.{param}): {exc}")
+                raise
+
     def _on_test_connection(self) -> None:
         """通讯自检：读取后端设备的实时连接状态，逐设备给出明确结果。
 
@@ -562,6 +613,7 @@ class CommunicationSettings(QWidget):
     def _on_save(self) -> None:
         """保存设置到配置文件"""
         try:
+            self._sync_widgets_to_settings()
             self.communication_service.save()
             self._dirty = False
             self.logger.info("通信设置已保存")

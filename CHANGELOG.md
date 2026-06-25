@@ -6,6 +6,16 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Communication settings: persist the serial-port (and all other shown) values to the
+  config on save. If a saved port (e.g. `COM10`) was not among the currently available
+  ports, the dropdown fell back to the first available port but the underlying draft kept
+  the stale value, so saving wrote the old port instead of the displayed one (the temp
+  controller port stayed `COM10`). `_on_save` now syncs visible widget values to the
+  config draft before saving, and refreshing the port list updates the setting when the
+  shown port changes.
+
 ## [1.4.260625] - 2026-06-25
 
 ### Changed
