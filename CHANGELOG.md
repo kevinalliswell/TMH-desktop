@@ -6,17 +6,33 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 ## [Unreleased]
 
+## [1.3.260625] - 2026-06-25
+
 ### Added
 
 - Configurable flammable-gas (H2/CO) flow upper limits (`GAS_SAFETY_LIMITS` in the
   communication config, default 5 L/min each), editable only after admin-password
   unlock on the communication settings page.
+- Device communication self-test: `scripts/comm_selftest.py` field-commissioning CLI
+  (MFC/Temp/Balance, with a Modbus address scan), and an in-app "测试连接" button on
+  the communication settings page reporting per-device connection status.
+
+### Changed
+
+- CI now runs the smoke suite on Windows in addition to Ubuntu.
+- Pin dependency upper bounds to guard against silent major-version breakage; route
+  Dependabot updates to `develop` and ignore the pandas 3.x major bump.
 
 ### Security
 
 - Enforce the H2/CO flow upper limits as a hard clamp before any setpoint is written
   to the MFC — covering manual control, experiment stages, and programmatic calls.
   Manual-panel and stage-editor input ranges are synced to the configured limit.
+
+### Removed
+
+- Stop tracking runtime data, generated exports, and developer working notes; archive
+  retrospective development-log docs under `docs/dev-notes/`.
 
 ## [1.2.260624] - 2026-06-24
 
