@@ -413,10 +413,7 @@ class DeviceManager:
                 v is not None for v in data.values() if isinstance(v, (int, float))
             ),
             "Balance": lambda data: data and data.get('weight') is not None,
-            "MFC": lambda data: (
-                data and isinstance(data, dict)
-                and any(v is not None for v in data.values() if isinstance(v, (int, float)))
-            ),
+            "MFC": self._validate_mfc_payload_data,
         }
 
         for name, device in devices_snapshot.items():
@@ -516,10 +513,48 @@ class DeviceManager:
         
         try:
             # 检查是否有任何气体通道有有效数据
+            if hasattr(device, 'get_latest_data'):
+                if self._validate_mfc_payload_data(device.get_latest_data()):
+                    return True
+            elif hasattr(device, '_last_valid_data'):
+                if self._validate_mfc_payload_data(device._last_valid_data):
+                    return True
+
             flows = getattr(device, 'current_flows', {})
-            return any(v is not None for v in flows.values()) if flows else False
+            return self._validate_mfc_payload_data(flows)
         except Exception:
             return False
+
+    def _validate_mfc_payload_data(self, data):
+        """Return True when an MFC payload contains at least one PV/SV/flow value."""
+        if not isinstance(data, dict) or not data:
+            return False
+
+        channel_value_keys = ("PV", "pv", "SV", "sv")
+
+        for key in channel_value_keys:
+            if key in data and self._is_valid_mfc_numeric_value(data.get(key)):
+                return True
+
+        for key, value in data.items():
+            if key == "timestamp":
+                continue
+
+            if isinstance(value, dict):
+                for channel_key in channel_value_keys:
+                    if (
+                        channel_key in value
+                        and self._is_valid_mfc_numeric_value(value.get(channel_key))
+                    ):
+                        return True
+            elif self._is_valid_mfc_numeric_value(value):
+                return True
+
+        return False
+
+    @staticmethod
+    def _is_valid_mfc_numeric_value(value):
+        return value is not None and isinstance(value, (int, float)) and not isinstance(value, bool)
 
     def _validate_mfc_data(self):
         """验证MFC数据有效性（兼容旧接口）"""
