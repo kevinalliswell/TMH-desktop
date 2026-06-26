@@ -315,6 +315,7 @@ def test_registry_supports_env_module_alias_and_import_path(monkeypatch, tmp_pat
 def test_app_runtime_assembles_devices_from_registry_and_repository(tmp_path):
     app = QCoreApplication.instance() or QCoreApplication([])
     config = _build_config()
+    stop_order = []
 
     class FakeDevice:
         def __init__(self, name):
@@ -348,6 +349,7 @@ def test_app_runtime_assembles_devices_from_registry_and_repository(tmp_path):
                 device.start()
 
         def stop_all(self):
+            stop_order.append("devices")
             self.running = False
             for device in self.devices.values():
                 device.stop()
@@ -381,6 +383,7 @@ def test_app_runtime_assembles_devices_from_registry_and_repository(tmp_path):
             self.started = True
 
         def stop(self):
+            stop_order.append("data_handler")
             self.stopped = True
 
         def latest_snapshot_bundle(self):
@@ -394,6 +397,7 @@ def test_app_runtime_assembles_devices_from_registry_and_repository(tmp_path):
             self.cleaned = False
 
         def cleanup(self):
+            stop_order.append("experiment_runtime")
             self.cleaned = True
 
     class FakeRepository:
@@ -449,6 +453,7 @@ def test_app_runtime_assembles_devices_from_registry_and_repository(tmp_path):
 
     assert data_handler.stopped is True
     assert experiment_runtime.cleaned is True
+    assert stop_order == ["experiment_runtime", "data_handler", "devices"]
     assert runtime.experiment_runtime is None
     assert runtime.device_manager is None
     assert app is not None

@@ -90,44 +90,24 @@ class BalanceClient(BaseDevice):
                     time.sleep(0.1)
                     continue
                 
-                # 直接读取真实设备数据，移除模拟模式
-                # 真实设备模式
-                with self.serial_port_context() as ser:
-                    if ser:
-                        # 设置临时超时
-                        original_timeout = ser.timeout
-                        ser.timeout = self.READ_TIMEOUT
-                        
-                        try:
-                            # 非阻塞读取数据
-                            raw_data = ser.readline().decode('utf-8', 'ignore').strip()
-                            if raw_data and self._rs232.STABLE_MARKER in raw_data:
-                                weight = self._parse_data(raw_data)
-                                if weight is not None:
-                                    data = {
-                                        'timestamp': time.time(),
-                                        'weight': weight
-                                    }
-                                    
-                                    # 移除数据滤波功能，直接使用原始数据
-                                    
-                                    # 更新最近数据和队列
-                                    with self._data_lock:
-                                        self._last_valid_data = data
-                                    
-                                    # 确保队列不满
-                                    try:
-                                        self.data_queue.put_nowait(data)
-                                    except Exception:
-                                        try:
-                                            # 如果队列满，清除一项
-                                            self.data_queue.get_nowait()
-                                            self.data_queue.put_nowait(data)
-                                        except Exception:
-                                            pass
-                        finally:
-                            # 恢复原始超时
-                            ser.timeout = original_timeout
+                # 真实设备模式；与去皮命令共用串口锁，避免命令响应被采集线程抢读
+                with self.lock:
+                    with self.serial_port_context() as ser:
+                        if ser:
+                            # 设置临时超时
+                            original_timeout = ser.timeout
+                            ser.timeout = self.READ_TIMEOUT
+
+                            try:
+                                # 非阻塞读取数据
+                                raw_data = ser.readline().decode('utf-8', 'ignore').strip()
+                                if raw_data and self._rs232.STABLE_MARKER in raw_data:
+                                    weight = self._parse_data(raw_data)
+                                    if weight is not None:
+                                        self._cache_weight(weight)
+                            finally:
+                                # 恢复原始超时
+                                ser.timeout = original_timeout
                 
                 # 短暂休眠
                 time.sleep(read_interval)
@@ -158,57 +138,64 @@ class BalanceClient(BaseDevice):
         self.logger.info("已暂停数据采集线程")
 
         try:
-            with self.serial_port_context() as ser:
-                if not ser:
-                    self.logger.error("串口不可用，无法发送去皮命令")
-                    return False
+            with self.lock:
+                with self.serial_port_context() as ser:
+                    if not ser:
+                        self.logger.error("串口不可用，无法发送去皮命令")
+                        return False
 
-                ser.reset_input_buffer()
+                    ser.reset_input_buffer()
+                    try:
+                        ser.reset_output_buffer()
+                    except Exception:
+                        pass
 
-                # 发送去皮命令（常量来自协议层）
-                tare_cmd = self._rs232.TARE_CMD
-                ser.write(tare_cmd)
-                self.logger.info(f"已发送去皮命令: {tare_cmd!r}")
+                    # 发送去皮命令（常量来自协议层）
+                    tare_cmd = self._rs232.TARE_CMD
+                    ser.write(tare_cmd)
+                    self.logger.info(f"已发送去皮命令: {tare_cmd!r}")
 
-                # 等待设备处理
-                time.sleep(1.0)
+                    # 等待设备处理
+                    time.sleep(1.0)
 
-                # 累积读取响应，处理分段传输
-                accumulated_response = ""
-                max_attempts = 15
+                    # 累积读取响应，处理分段传输
+                    accumulated_response = ""
+                    max_attempts = 15
 
-                for attempt in range(max_attempts):
-                    waiting_bytes = ser.in_waiting
-                    if waiting_bytes > 0:
-                        new_data = ser.read(waiting_bytes).decode('utf-8', 'ignore')
-                        accumulated_response += new_data
-                        self.logger.debug(f"读取数据 ({attempt+1}): {new_data!r}")
+                    for attempt in range(max_attempts):
+                        waiting_bytes = ser.in_waiting
+                        if waiting_bytes > 0:
+                            new_data = ser.read(waiting_bytes).decode('utf-8', 'ignore')
+                            accumulated_response += new_data
+                            self.logger.debug(f"读取数据 ({attempt+1}): {new_data!r}")
 
-                        # 同时检测到 A00 和稳定数据时可提前退出
-                        if (self._rs232.TARE_ACK_MARKER in accumulated_response
-                                and self._rs232.STABLE_MARKER in accumulated_response):
-                            self.logger.debug("检测到完整响应（A00 + 稳定数据），停止读取")
-                            break
+                            # 同时检测到 A00 和稳定数据时可提前退出
+                            if (self._rs232.TARE_ACK_MARKER in accumulated_response
+                                    and self._rs232.STABLE_MARKER in accumulated_response):
+                                self.logger.debug("检测到完整响应（A00 + 稳定数据），停止读取")
+                                break
 
-                    time.sleep(0.15)
+                        time.sleep(0.15)
 
-                # 委托协议层解析响应
-                if not accumulated_response.strip():
-                    self.logger.warning("未收到任何响应数据")
+                    # 委托协议层解析响应
+                    if not accumulated_response.strip():
+                        self.logger.warning("未收到任何响应数据")
+                        self.logger.warning("========== 天平去皮命令未能确认执行 ==========")
+                        return False
+
+                    self.logger.info(f"最终累积响应: {accumulated_response!r}")
+                    result = self._rs232.parse_tare_response(accumulated_response)
+
+                    if result.success:
+                        weight_info = f", 重量={result.weight}g" if result.weight is not None else ""
+                        reason = "A00标志" if result.a00_found else "零重量数据"
+                        if result.weight is not None:
+                            self._cache_weight(result.weight)
+                        self.logger.info(f"========== 天平去皮成功（{reason}{weight_info}） ==========")
+                        return True
+
                     self.logger.warning("========== 天平去皮命令未能确认执行 ==========")
                     return False
-
-                self.logger.info(f"最终累积响应: {accumulated_response!r}")
-                result = self._rs232.parse_tare_response(accumulated_response)
-
-                if result.success:
-                    weight_info = f", 重量={result.weight}g" if result.weight is not None else ""
-                    reason = "A00标志" if result.a00_found else "零重量数据"
-                    self.logger.info(f"========== 天平去皮成功（{reason}{weight_info}） ==========")
-                    return True
-
-                self.logger.warning("========== 天平去皮命令未能确认执行 ==========")
-                return False
 
         except Exception as e:
             self.logger.error(f"========== 执行去皮命令失败: {e} ==========")
@@ -220,6 +207,22 @@ class BalanceClient(BaseDevice):
 
     # 移除模拟数据生成功能，专注于实时数据采集
 
+    def _cache_weight(self, weight: float) -> None:
+        data = {
+            'timestamp': time.time(),
+            'weight': weight,
+        }
+        with self._data_lock:
+            self._last_valid_data = data
+        try:
+            self.data_queue.put_nowait(data)
+        except Exception:
+            try:
+                self.data_queue.get_nowait()
+                self.data_queue.put_nowait(data)
+            except Exception:
+                pass
+
     def _read_device_data(self) -> Optional[Dict[str, Any]]:
         """读取设备数据，实现基类抽象方法
         
@@ -229,29 +232,30 @@ class BalanceClient(BaseDevice):
             Dict: 包含重量数据的字典，读取失败返回None
         """
         try:
-            with self.serial_port_context() as ser:
-                if not ser:
-                    return None
-                
-                # 设置临时超时
-                original_timeout = ser.timeout
-                ser.timeout = self.READ_TIMEOUT
-                
-                try:
-                    # 检查串口是否有数据
-                    if ser.in_waiting > 0:
-                        raw_data = ser.readline().decode('utf-8', 'ignore').strip()
-                        if raw_data and self._rs232.STABLE_MARKER in raw_data:
-                            weight = self._parse_data(raw_data)
-                            if weight is not None:
-                                data = {
-                                    'timestamp': time.time(), 
-                                    'weight': weight
-                                }
-                                return data
-                finally:
-                    # 恢复原始超时
-                    ser.timeout = original_timeout
+            with self.lock:
+                with self.serial_port_context() as ser:
+                    if not ser:
+                        return None
+
+                    # 设置临时超时
+                    original_timeout = ser.timeout
+                    ser.timeout = self.READ_TIMEOUT
+
+                    try:
+                        # 检查串口是否有数据
+                        if ser.in_waiting > 0:
+                            raw_data = ser.readline().decode('utf-8', 'ignore').strip()
+                            if raw_data and self._rs232.STABLE_MARKER in raw_data:
+                                weight = self._parse_data(raw_data)
+                                if weight is not None:
+                                    data = {
+                                        'timestamp': time.time(),
+                                        'weight': weight
+                                    }
+                                    return data
+                    finally:
+                        # 恢复原始超时
+                        ser.timeout = original_timeout
         except Exception as e:
             self.logger.error(f"读取设备数据错误: {e}")
         
