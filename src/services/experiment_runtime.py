@@ -92,8 +92,8 @@ class ExperimentRuntime(QObject):
     def set_experiment_mode_by_id(self, mode_id: str) -> bool:
         return self._require_controller().set_experiment_mode_by_id(mode_id)
 
-    def start_experiment(self) -> bool:
-        return self._require_controller().start_experiment()
+    def start_experiment(self, experiment_record=None) -> bool:
+        return self._require_controller().start_experiment(experiment_record)
 
     def stop_experiment(self) -> bool:
         return self._require_controller().stop_experiment()
