@@ -3,7 +3,7 @@
 # 上界用于防止下一个大版本静默引入破坏性变更（major 升级须人工验证）。
 
 # 添加构建相关依赖
-pyinstaller>=6.16.0,<7
+pyinstaller>=6.21.0,<7
 
 # GUI Framework
 PySide6>=6.9.0,<7
