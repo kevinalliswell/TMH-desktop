@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 ## [Unreleased]
 
+### Added
+
+- Single-instance guard: a second app launch is now refused with a prompt instead of
+  competing with the first instance for the exclusive serial ports / device buses (#26).
+  Implemented with a `QLockFile` that reclaims a stale lock left by a crashed instance.
+
 ### Fixed
 
 - Communication settings: persist the serial-port (and all other shown) values to the

@@ -21,6 +21,21 @@ def main():
         from src.ui.main_window import MainWindow
 
         app = QApplication(sys.argv)
+
+        # 单实例保护：串口/总线为独占资源，禁止启动第二个实例（issue #26）。
+        # instance_lock 必须在 main() 生命周期内一直持有，退出时自动释放。
+        from src.utils.single_instance import acquire_single_instance_lock
+        instance_lock = acquire_single_instance_lock()
+        if instance_lock is None:
+            from PySide6.QtWidgets import QMessageBox
+            logger.warning("检测到 TMH 已在运行，拒绝启动第二个实例")
+            QMessageBox.warning(
+                None,
+                "TMH 已在运行",
+                "检测到 TMH 程序已经在运行，不能重复启动。\n请切换到已经打开的窗口。",
+            )
+            return
+
         window = MainWindow()
         window.show()
 
