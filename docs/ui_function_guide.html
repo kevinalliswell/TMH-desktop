@@ -1,0 +1,846 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TMH-LPF-900 界面截图与功能说明</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172026;
+      --muted: #63707a;
+      --paper: #f7f5ef;
+      --panel: #fffdf8;
+      --line: #d7d1c3;
+      --brand: #116466;
+      --brand-deep: #0b3f40;
+      --accent: #d87a31;
+      --ok: #2f8f5b;
+      --warn: #b56d13;
+      --danger: #ba3a3a;
+      --blue: #2c6faa;
+      --shadow: 0 18px 50px rgba(23, 32, 38, 0.12);
+      --radius: 8px;
+      --max: 1180px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, rgba(17, 100, 102, 0.08), transparent 320px),
+        var(--paper);
+      line-height: 1.72;
+    }
+
+    a {
+      color: var(--brand);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid rgba(23, 32, 38, 0.12);
+      background: rgba(247, 245, 239, 0.92);
+      backdrop-filter: blur(16px);
+    }
+
+    .topbar-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      letter-spacing: 0;
+      color: var(--brand-deep);
+      white-space: nowrap;
+    }
+
+    .mark {
+      width: 30px;
+      height: 30px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--brand);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: flex-end;
+      font-size: 14px;
+    }
+
+    .hero {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 56px 24px 28px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+      gap: 36px;
+      align-items: center;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--brand);
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 780px;
+      font-size: clamp(34px, 5vw, 64px);
+      color: var(--ink);
+    }
+
+    h2 {
+      margin: 0 0 18px;
+      font-size: clamp(26px, 3vw, 38px);
+      color: var(--brand-deep);
+    }
+
+    h3 {
+      margin: 0 0 10px;
+      font-size: 21px;
+      color: #23313a;
+    }
+
+    .lead {
+      margin: 18px 0 0;
+      max-width: 760px;
+      font-size: 18px;
+      color: #3a474f;
+    }
+
+    .hero-meta {
+      margin-top: 26px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 253, 248, 0.72);
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 20px;
+      color: var(--brand-deep);
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .hero-shot {
+      margin: 0;
+    }
+
+    .hero-shot img,
+    .screenshot img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: var(--radius);
+      border: 1px solid rgba(23, 32, 38, 0.18);
+      box-shadow: var(--shadow);
+      background: #111;
+    }
+
+    .hero-shot figcaption,
+    .screenshot figcaption {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    main {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 24px 72px;
+    }
+
+    section {
+      margin-top: 56px;
+    }
+
+    .notice {
+      padding: 18px 20px;
+      border-left: 4px solid var(--accent);
+      border-radius: var(--radius);
+      background: #fff8ea;
+      color: #4d3b1f;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tile {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: 0 8px 24px rgba(23, 32, 38, 0.06);
+    }
+
+    .tile p {
+      margin: 0;
+      color: #42505a;
+    }
+
+    .tile .label {
+      display: inline-block;
+      margin-bottom: 8px;
+      color: var(--brand);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      counter-reset: step;
+    }
+
+    .step {
+      position: relative;
+      min-height: 164px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+    }
+
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      display: inline-grid;
+      width: 30px;
+      height: 30px;
+      margin-bottom: 14px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--brand);
+      color: #fff;
+      font-weight: 800;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--brand-deep);
+      font-size: 17px;
+    }
+
+    .step p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .module {
+      margin-top: 28px;
+      padding: 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .module:first-of-type {
+      border-top: 0;
+    }
+
+    .module-inner {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.35fr);
+      gap: 28px;
+      padding: 32px 0;
+      align-items: start;
+    }
+
+    .module-copy p {
+      margin: 0 0 14px;
+      color: #42505a;
+    }
+
+    .bullets {
+      margin: 14px 0 0;
+      padding-left: 18px;
+      color: #42505a;
+    }
+
+    .bullets li {
+      margin: 7px 0;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0 0;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 10px;
+      border: 1px solid rgba(17, 100, 102, 0.28);
+      border-radius: 999px;
+      background: rgba(17, 100, 102, 0.08);
+      color: var(--brand-deep);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+    }
+
+    table {
+      width: 100%;
+      min-width: 720px;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--brand-deep);
+      background: #ece7db;
+      font-weight: 800;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: #ebe5d8;
+      color: #22323b;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow-x: auto;
+      padding: 18px;
+      border-radius: var(--radius);
+      background: #18242a;
+      color: #f2f5f3;
+      box-shadow: var(--shadow);
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+    }
+
+    .status-list {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .status {
+      padding: 14px;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .status strong {
+      display: block;
+      color: var(--brand-deep);
+    }
+
+    .status span {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 22px;
+    }
+
+    .footer {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .module-inner,
+      .grid,
+      .grid.two,
+      .gallery {
+        grid-template-columns: 1fr;
+      }
+
+      .flow {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .status-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .hero-meta {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .topbar-inner {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .nav {
+        justify-content: flex-start;
+      }
+
+      .hero {
+        padding-top: 38px;
+      }
+
+      .flow,
+      .status-list {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media print {
+      .topbar {
+        position: static;
+      }
+
+      body {
+        background: #fff;
+      }
+
+      .tile,
+      .step,
+      .status,
+      pre,
+      .hero-shot img,
+      .screenshot img {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand-mark" href="#top" aria-label="返回顶部"><span class="mark">TMH</span><span>界面功能说明</span></a>
+      <nav class="nav" aria-label="页面导航">
+        <a href="#run">本地运行</a>
+        <a href="#workflow">使用流程</a>
+        <a href="#modules">功能模块</a>
+        <a href="#standards">标准模式</a>
+        <a href="#gallery">截图索引</a>
+      </nav>
+    </div>
+  </header>
+
+  <div id="top" class="hero">
+    <div>
+      <p class="eyebrow">TMH-LPF-900 desktop UI review</p>
+      <h1>TMH-LPF-900 铁矿石冶金性能综合检测与控制系统</h1>
+      <p class="lead">本文档基于本地实际运行界面整理，覆盖主窗口、实验控制、实验配置、历史查询、通信设置、帮助页和实验参数弹窗，便于研发、测试、交付和现场培训快速理解系统能力。</p>
+      <div class="hero-meta" aria-label="文档摘要">
+        <div class="metric">
+          <strong>1.5.260625</strong>
+          <span>软件版本</span>
+        </div>
+        <div class="metric">
+          <strong>8 张</strong>
+          <span>本地界面截图</span>
+        </div>
+        <div class="metric">
+          <strong>3 类</strong>
+          <span>GB 标准实验模式</span>
+        </div>
+      </div>
+    </div>
+    <figure class="hero-shot">
+      <img src="ui-screenshots/01-integrated-control.png" alt="TMH-LPF-900 实验管理主界面截图">
+      <figcaption>集成控制页面，左侧为实时监控与曲线入口，右侧为实验、气氛、重量和数据操作。</figcaption>
+    </figure>
+  </div>
+
+  <main>
+    <section id="run">
+      <h2>本地运行记录</h2>
+      <div class="grid two">
+        <div class="tile">
+          <span class="label">运行环境</span>
+          <p>本次截图在 macOS 本地环境生成，使用 Python 3.12 虚拟环境安装 `requirements-dev.txt` 和本地 `packages/tmh_comm` 包。主程序入口为 `src/app.py`。</p>
+        </div>
+        <div class="tile">
+          <span class="label">设备状态</span>
+          <p>本机未连接实验串口设备，温控、MFC、天平默认端口无法打开，应用仍可启动并进入重连状态。截图底部红色状态栏反映的是无设备连接的本地验证状态。</p>
+        </div>
+      </div>
+      <pre><code># 首次运行
+/opt/homebrew/bin/python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt -e packages/tmh_comm
+
+# 启动桌面程序
+QTWEBENGINE_DISABLE_SANDBOX=1 .venv/bin/python src/app.py</code></pre>
+      <p class="notice">现场运行时需要先确认温度控制器、气体质量流量计和电子天平对应串口可用。无设备环境适合做界面、配置、历史数据和报告流程验证，但不能完成真实实验启动。</p>
+    </section>
+
+    <section id="workflow">
+      <h2>推荐使用流程</h2>
+      <div class="flow">
+        <div class="step">
+          <strong>配置通信</strong>
+          <p>在通信设置中确认温控器、MFC、天平串口参数、从机地址、采样间隔和可燃气体安全上限。</p>
+        </div>
+        <div class="step">
+          <strong>选择实验模式</strong>
+          <p>使用内置 GB 标准模式，或复制标准模式后编辑自定义阶段、目标温度、时间和气体配比。</p>
+        </div>
+        <div class="step">
+          <strong>录入实验信息</strong>
+          <p>点击开始实验，填写项目、样品、编号、类型、初重、操作者和备注，系统会校验必填项。</p>
+        </div>
+        <div class="step">
+          <strong>监控与控制</strong>
+          <p>实验中查看温度、流量、重量和失重率，必要时手动设置气体流量、清零天平或设置初始重量。</p>
+        </div>
+        <div class="step">
+          <strong>归档与报告</strong>
+          <p>停止后进入历史查询，筛选记录、回放曲线、导出 CSV/TXT/XLSX，并按实验类型生成 HTML 报告。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="modules">
+      <h2>功能模块详解</h2>
+
+      <article class="module">
+        <div class="module-inner">
+          <div class="module-copy">
+            <h3>首页与主框架</h3>
+            <p>主窗口采用深色仪器控制台风格，左侧固定导航包含：首页、实验管理、实验配置、历史查询、通信设置、使用帮助、关于系统。顶部展示软件名称、英文副标题、开发单位和当前时间。</p>
+            <ul class="bullets">
+              <li>首页展示北京科技大学标识、软件名称、版本、作者、发布日期、联系方式和官网。</li>
+              <li>侧边栏支持折叠，折叠后保留图标和悬浮提示。</li>
+              <li>底部状态栏用于集中显示设备连接与异常信息，避免标题栏重复提示。</li>
+            </ul>
+          </div>
+          <figure class="screenshot">
+            <img src="ui-screenshots/00-home.png" alt="首页截图">
+            <figcaption>首页展示软件身份、版本信息和项目归属。</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="module">
+        <div class="module-inner">
+          <div class="module-copy">
+            <h3>实验管理与实时控制</h3>
+            <p>实验管理页是日常操作核心。左侧包含实时监控数据和实时图表两个标签页，右侧是控制面板。当前截图处于无设备连接状态，因此数值显示为占位符并在状态栏提示串口不可用。</p>
+            <ul class="bullets">
+              <li>主要监控参数：样品温度上/中/下、样品重量、失重、失重率、N2/CO2/CO/H2 流量和总流量。</li>
+              <li>其他温度：PV1、SV1、PV2、SV2、PV3、SV3，用于展示 T1 至 T6 的辅助温度信息。</li>
+              <li>状态信息：实验模式、实验计时、实验阶段和系统状态。</li>
+              <li>实时图表：温度、流量、重量和数据表，数据表记录时间、实验时长、样品温度、气体流量、重量、失重、实验状态和系统提示。</li>
+            </ul>
+            <div class="tag-row">
+              <span class="tag">开始/停止实验</span>
+              <span class="tag">手动气体流量</span>
+              <span class="tag">天平清零</span>
+              <span class="tag">初始重量</span>
+              <span class="tag">保存数据</span>
+              <span class="tag">实验重置</span>
+            </div>
+          </div>
+          <figure class="screenshot">
+            <img src="ui-screenshots/01-integrated-control.png" alt="实验管理页面截图">
+            <figcaption>右侧气氛控制支持 N2、CO、CO2、H2 手动设定，CO 与 H2 受安全上限约束。</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="module">
+        <div class="module-inner">
+          <div class="module-copy">
+            <h3>实验参数设置弹窗</h3>
+            <p>点击“开始实验”后，系统先打开实验参数设置弹窗。保存成功后才会进入设备可用性检查、实验文件创建、实验模式配置和实验运行流程。</p>
+            <ul class="bullets">
+              <li>必填字段：项目名称、样品名称、样品编号、样品初重、操作人员。</li>
+              <li>实验类型来自启用的标准和自定义模式，样品编号可按实验类型自动生成 RED、SWE、RDI 或 CUS 前缀。</li>
+              <li>样品初重范围为 0 至 1000 g，必须大于 0，保留 4 位小数。</li>
+              <li>备注会写入实验记录，用于后续历史查询和报告说明。</li>
+            </ul>
+          </div>
+          <figure class="screenshot">
+            <img src="ui-screenshots/07-start-experiment-dialog.png" alt="实验参数设置弹窗截图">
+            <figcaption>弹窗示例展示项目、样品、编号、实验类型、初重、操作者、时间和备注。</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="module">
+        <div class="module-inner">
+          <div class="module-copy">
+            <h3>实验配置</h3>
+            <p>实验配置页用于查看和维护实验模式。左侧列表合并展示内置标准模式与用户自定义模式，右侧展示基本信息和阶段表。标准模式默认只读，可通过复制生成可编辑自定义模式。</p>
+            <ul class="bullets">
+              <li>基本信息：名称、描述、类别和启用状态。</li>
+              <li>阶段字段：阶段名、描述、目标温度、温度容差、持续时间、升温速率和气体组成。</li>
+              <li>支持复制、添加、删除模式，以及添加、编辑、删除阶段并保存修改。</li>
+              <li>阶段类型包含 HEATING、STABILIZING、REDUCING、COOLING。</li>
+            </ul>
+          </div>
+          <figure class="screenshot">
+            <img src="ui-screenshots/02-experiment-config.png" alt="实验配置页面截图">
+            <figcaption>示例选中 GB/T 13241-2017 还原性测定方法，右侧展示 4 个实验阶段。</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="module">
+        <div class="module-inner">
+          <div class="module-copy">
+            <h3>历史查询、数据导出与报告</h3>
+            <p>历史查询页面向实验记录管理。上方提供搜索、刷新、删除、导出、生成报告、分析实验和数据库诊断按钮；中部表格展示实验元数据；下方标签页用于查看实验曲线和原始实验数据。</p>
+            <ul class="bullets">
+              <li>实验表字段：实验名称、样品名称、重量、开始时间、结束时间、操作人员、实验类型和备注。</li>
+              <li>选中实验后启用删除、导出、报告和分析按钮。</li>
+              <li>导出格式支持 CSV、TXT、XLSX，内容包含实验信息和温度、重量、失重、CO、CO2、N2、H2 序列。</li>
+              <li>报告生成按实验类型识别低温粉化、还原性和自由膨胀，输出 HTML 报告。</li>
+              <li>数据库诊断用于检查实验记录、数据点、孤立数据和表结构完整性。</li>
+            </ul>
+          </div>
+          <figure class="screenshot">
+            <img src="ui-screenshots/03-history-query.png" alt="历史查询页面截图">
+            <figcaption>本地无历史实验记录时，表格和曲线区域为空，按钮状态按选择情况启用。</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="module">
+        <div class="module-inner">
+          <div class="module-copy">
+            <h3>通信设置</h3>
+            <p>通信设置页按设备和采样分标签配置，覆盖温度控制器、气体流量计、电子天平和采样设置。页面切换或关闭时会提示未保存修改。</p>
+            <ul class="bullets">
+              <li>温度控制器：串口、波特率、数据位、校验位、停止位和温控器从机地址。</li>
+              <li>气体流量计：串口参数、H2/N2/CO2/CO 从机地址、流量缩放系数和 H2/CO 可燃气体安全上限。</li>
+              <li>电子天平：串口参数，波特率固定为硬件要求值。</li>
+              <li>采样设置：数据采样间隔，默认 1 秒。</li>
+              <li>底部操作：测试连接、恢复默认、保存设置。安全上限需管理员密码解锁后才能修改。</li>
+            </ul>
+          </div>
+          <figure class="screenshot">
+            <img src="ui-screenshots/04-communication-settings.png" alt="通信设置页面截图">
+            <figcaption>截图展示温度控制器标签页。本机可用串口被自动扫描并填入下拉框。</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="module">
+        <div class="module-inner">
+          <div class="module-copy">
+            <h3>帮助与关于</h3>
+            <p>帮助页通过内置 WebEngine 加载本地 `resources/help.html`，提供快速开始、操作指南、实验配置、设备配置、故障排除和常见问题。关于页以滚动内容展示系统简介、主要功能、标准规范、开发团队、版权和联系方式。</p>
+            <ul class="bullets">
+              <li>帮助页包含顶部分类按钮和搜索框，适合现场人员快速定位操作步骤。</li>
+              <li>关于页列出 GB/T 13240、GB/T 13241、GB/T 13242 等标准关联信息。</li>
+              <li>两页均为只读说明页面，不直接修改实验数据或通信配置。</li>
+            </ul>
+          </div>
+          <div class="gallery">
+            <figure class="screenshot">
+              <img src="ui-screenshots/05-help.png" alt="使用帮助页面截图">
+              <figcaption>使用帮助页面。</figcaption>
+            </figure>
+            <figure class="screenshot">
+              <img src="ui-screenshots/06-about.png" alt="关于系统页面截图">
+              <figcaption>关于系统页面。</figcaption>
+            </figure>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section id="standards">
+      <h2>内置标准实验模式</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>模式</th>
+              <th>用途</th>
+              <th>核心阶段</th>
+              <th>典型气氛与温度</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GB/T 13241-2017 铁矿石还原性测定方法</td>
+              <td>测定铁矿石还原性能。</td>
+              <td>升温、900℃恒温、180 min 还原、N2 保护冷却。</td>
+              <td>900℃，30% CO + 70% N2，还原总流量 15 L/min。</td>
+            </tr>
+            <tr>
+              <td>GB/T 13242-2017 铁矿石低温粉化试验方法</td>
+              <td>测定低温条件下铁矿石粉化特性。</td>
+              <td>升温、500℃恒温、60 min 还原、N2 保护冷却。</td>
+              <td>500℃，20% CO + 20% CO2 + 60% N2，还原总流量 15 L/min。</td>
+            </tr>
+            <tr>
+              <td>GB/T 13240-2018 球团矿自由膨胀指数测定方法</td>
+              <td>测定球团矿在还原气氛下的自由膨胀指数。</td>
+              <td>升温、900℃恒温、60 min 还原、N2 保护冷却至 50℃。</td>
+              <td>900℃，30% CO + 70% N2，还原总流量 15 L/min。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>关键安全与校验点</h2>
+      <div class="status-list">
+        <div class="status">
+          <strong>设备新鲜度</strong>
+          <span>开始实验前检查设备是否运行、是否有数据、数据是否超过 10 秒未更新。</span>
+        </div>
+        <div class="status">
+          <strong>气体安全上限</strong>
+          <span>H2 与 CO 默认上限为 5.0 L/min，并需管理员解锁后修改。</span>
+        </div>
+        <div class="status">
+          <strong>压力提醒</strong>
+          <span>气氛控制面板提示末端压力表工作压力 0.2 MPa，不可超过 0.3 MPa。</span>
+        </div>
+        <div class="status">
+          <strong>重置保护</strong>
+          <span>实验重置会提示保存数据，并尝试切换到 N2 保护气氛。</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="gallery">
+      <h2>截图索引</h2>
+      <div class="gallery">
+        <figure class="screenshot">
+          <img src="ui-screenshots/00-home.png" alt="首页">
+          <figcaption>00 首页</figcaption>
+        </figure>
+        <figure class="screenshot">
+          <img src="ui-screenshots/01-integrated-control.png" alt="实验管理">
+          <figcaption>01 实验管理</figcaption>
+        </figure>
+        <figure class="screenshot">
+          <img src="ui-screenshots/02-experiment-config.png" alt="实验配置">
+          <figcaption>02 实验配置</figcaption>
+        </figure>
+        <figure class="screenshot">
+          <img src="ui-screenshots/03-history-query.png" alt="历史查询">
+          <figcaption>03 历史查询</figcaption>
+        </figure>
+        <figure class="screenshot">
+          <img src="ui-screenshots/04-communication-settings.png" alt="通信设置">
+          <figcaption>04 通信设置</figcaption>
+        </figure>
+        <figure class="screenshot">
+          <img src="ui-screenshots/05-help.png" alt="使用帮助">
+          <figcaption>05 使用帮助</figcaption>
+        </figure>
+        <figure class="screenshot">
+          <img src="ui-screenshots/06-about.png" alt="关于系统">
+          <figcaption>06 关于系统</figcaption>
+        </figure>
+        <figure class="screenshot">
+          <img src="ui-screenshots/07-start-experiment-dialog.png" alt="实验参数设置弹窗">
+          <figcaption>07 实验参数设置弹窗</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>文档生成日期：2026-06-28。截图来自本地运行的 TMH-LPF-900 桌面程序，版本信息读取自 `configs/software.info`。</p>
+    </footer>
+  </main>
+</body>
+</html>
