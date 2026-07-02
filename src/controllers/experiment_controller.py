@@ -24,6 +24,7 @@ from src.services.enhanced_experiment_modes import EnhancedExperimentModeManager
 from src.services.experiment_type_manager import ExperimentTypeManager
 from src.services.database import ExperimentDatabase, ExperimentData
 from src.utils.path_manager import PathManager
+from src.utils.audit import audit, AuditCategory, AuditResult
 
 
 class ExperimentController(QObject):
@@ -259,6 +260,7 @@ class ExperimentController(QObject):
             self.current_experiment_type = experiment_type
             self.current_experiment_type_name = experiment_type.value
             self.logger.info(f"设置实验模式: {experiment_type.value}")
+            audit(AuditCategory.EXPERIMENT, "set_mode", mode=experiment_type.value)
             return True
         return False
     
@@ -506,11 +508,22 @@ class ExperimentController(QObject):
             else:
                 self.logger.info(f"开始自定义实验: {self.current_experiment_type_name}")
             self.logger.info(f"实验ID: {self.current_experiment.experiment_id}")
-            
+
+            audit(
+                AuditCategory.EXPERIMENT, "start",
+                operator=self.experiment_params.get("operator"),
+                experiment_id=self.current_experiment.experiment_id,
+                sample_name=self.experiment_params.get("sample_name"),
+                mode=self.current_experiment_type_name or (
+                    self.current_experiment_type.value if self.current_experiment_type else None
+                ),
+            )
+
             return True
-            
+
         except InvalidTransitionError as e:
             self.logger.error(f"启动实验失败（状态转换错误）: {e}")
+            audit(AuditCategory.EXPERIMENT, "start", result=AuditResult.FAILURE, error=str(e))
             return False
         except Exception as e:
             self.logger.error(f"启动实验失败: {str(e)}")
@@ -567,6 +580,11 @@ class ExperimentController(QObject):
         )
         self.experiment_stopped.emit()
         self.logger.info("实验已停止")
+        audit(
+            AuditCategory.EXPERIMENT, "stop",
+            operator=self.experiment_params.get("operator") if self.experiment_params else None,
+            experiment_id=getattr(self.current_experiment, "experiment_id", None),
+        )
         return True
     
     def execute_current_experiment_stage(self) -> None:
@@ -696,6 +714,11 @@ class ExperimentController(QObject):
         )
         self.experiment_completed.emit()
         self.logger.info("实验已完成")
+        audit(
+            AuditCategory.EXPERIMENT, "complete",
+            operator=self.experiment_params.get("operator") if self.experiment_params else None,
+            experiment_id=getattr(self.current_experiment, "experiment_id", None),
+        )
     
     def control_gas_flow(self, gas_name: str, flow_value: float) -> bool:
         """

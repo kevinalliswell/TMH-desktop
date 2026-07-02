@@ -8,6 +8,7 @@ import atexit
 # 设备客户端类将通过外部注册，不在此处直接导入
 from src.utils.logger import get_logger
 from src.utils.path_manager import PathManager
+from src.utils.audit import audit, AuditCategory, AuditResult
 from tmh_comm.standard import (
     build_balance_frame,
     build_mfc_frame,
@@ -350,6 +351,10 @@ class DeviceManager:
                 self.logger.debug(f"成功设置{gas}流量为{value} L/min")
             else:
                 self.logger.warning(f"设置{gas}流量为{value} L/min失败")
+            # 审计关键操作：气体流量设定 (Issue #34)
+            audit(AuditCategory.GAS, "set_flow",
+                  result=AuditResult.SUCCESS if result else AuditResult.FAILURE,
+                  gas=gas, value=value)
             return result
         except ValueError:
             self.logger.error(f"流量值不是有效数字: {value}")

@@ -5,6 +5,7 @@ import secrets
 
 from src.utils.logger import get_logger
 from src.utils.path_manager import PathManager
+from src.utils.audit import audit, AuditCategory, AuditResult
 
 logger = get_logger(__name__)
 
@@ -74,12 +75,18 @@ class PasswordManager:
 
     def verify_password(self, password: str) -> bool:
         """验证密码"""
-        return _verify_hash(password, self._password_hash, self._password_salt)
+        ok = _verify_hash(password, self._password_hash, self._password_salt)
+        audit(AuditCategory.AUTH, "verify_password",
+              result=AuditResult.SUCCESS if ok else AuditResult.FAILURE)
+        return ok
 
     def change_password(self, old_password: str, new_password: str) -> bool:
         """修改密码"""
-        if self.verify_password(old_password):
+        if _verify_hash(old_password, self._password_hash, self._password_salt):
             self._password_hash, self._password_salt = _hash_password(new_password)
             self.save_config()
+            audit(AuditCategory.AUTH, "change_password")
             return True
+        audit(AuditCategory.AUTH, "change_password", result=AuditResult.FAILURE,
+              reason="old_password_mismatch")
         return False
