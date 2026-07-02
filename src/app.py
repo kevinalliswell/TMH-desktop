@@ -23,12 +23,13 @@ def main():
 
         app = QApplication(sys.argv)
 
-        # 单实例保护：避免重复启动的实例争抢串口/总线资源 (Issue #26)
-        from src.utils.single_instance import SingleInstanceGuard
+        # 单实例保护：串口/总线为独占资源，禁止启动第二个实例 (Issue #26)。
+        # instance_lock 必须在 main() 生命周期内一直持有，退出时自动释放。
+        from src.utils.single_instance import acquire_single_instance_lock
         from src.utils.audit import audit, AuditCategory, AuditResult
 
-        single_instance = SingleInstanceGuard()
-        if not single_instance.try_acquire():
+        instance_lock = acquire_single_instance_lock()
+        if instance_lock is None:
             from PySide6.QtWidgets import QMessageBox
             logger.warning("检测到已有实例在运行，本次启动已被阻止")
             audit(AuditCategory.APP, "start_blocked",
