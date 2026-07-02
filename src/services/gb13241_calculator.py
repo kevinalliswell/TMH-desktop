@@ -35,7 +35,11 @@ class ReductionCalculator:
                 raise ValueError("初始重量和氧含量必须大于0")
                 
             weight_loss = initial_weight - current_weight
-            reduction_degree = (weight_loss / (initial_weight * oxygen_content)) * 100
+            # oxygen_content is expressed as a percentage (e.g. 28.5 for 28.5%),
+            # so convert it to a fraction before computing the removable-oxygen mass.
+            # Rt = ΔW / (W0 * O2fraction) * 100%
+            oxygen_fraction = oxygen_content / 100.0
+            reduction_degree = (weight_loss / (initial_weight * oxygen_fraction)) * 100
             return round(reduction_degree, 2)
             
         except Exception as e:
@@ -151,4 +155,4 @@ class ReductionCalculator:
             self.logger.error(f"验证实验条件失败: {str(e)}")
             problems.append(f"数据验证过程出错: {str(e)}")
             
-        return problems 
+        return problems 

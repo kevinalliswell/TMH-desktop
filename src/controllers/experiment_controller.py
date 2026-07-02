@@ -196,12 +196,18 @@ class ExperimentController(QObject):
                 "experiment_type": "experiment_type"
             }
 
+            # 备注为可选字段，允许为空，不应阻止实验启动
+            optional_fields = {"notes"}
+
             # 转换参数
             self.experiment_params = {}
             missing_fields = []
 
             for config_key, param_key in required_fields.items():
                 if config_key not in params:
+                    if config_key in optional_fields:
+                        self.experiment_params[param_key] = ""
+                        continue
                     missing_fields.append(config_key)
                     continue
 
@@ -215,6 +221,8 @@ class ExperimentController(QObject):
                             return False
                     except (ValueError, TypeError):
                         return False
+                elif config_key in optional_fields:
+                    pass  # 可选字段允许为空
                 elif not str(value).strip():  # 检查其他字段是否为空
                     missing_fields.append(config_key)
                     continue

@@ -327,7 +327,7 @@ class DeviceManager:
         Raises:
             ValueError: 当流量值无效时
         """
-        self.logger.debug(f"设置{gas}流量为{value/10.0} L/min")
+        self.logger.debug(f"设置{gas}流量为{value} L/min")
         
         # 从注册的设备中获取MFC
         mfc_device = self.devices.get("MFC") or self.multi_mfc
@@ -347,12 +347,12 @@ class DeviceManager:
         try:
             result = mfc_device.set_sp_value(gas, float(value))
             if result:
-                self.logger.debug(f"成功设置{gas}流量为{value/10.0}")
+                self.logger.debug(f"成功设置{gas}流量为{value} L/min")
             else:
-                self.logger.warning(f"设置{gas}流量为{value/10.0}失败")
+                self.logger.warning(f"设置{gas}流量为{value} L/min失败")
             return result
         except ValueError:
-            self.logger.error(f"流量值不是有效数字: {value/10.0}")
+            self.logger.error(f"流量值不是有效数字: {value}")
             return False
         except Exception as e:
             self.logger.error(f"设置{gas}流量出错: {str(e)}")

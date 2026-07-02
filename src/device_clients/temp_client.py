@@ -208,12 +208,16 @@ class TempClient(BaseDevice):
                 error_rate = (self._error_counter / self._read_counter) * 100 if self._read_counter > 0 else 0
                 self.logger.info(f"读取统计: 总次数={self._read_counter}, 错误率={error_rate:.2f}%")
 
+            # 无有效帧时返回空字典，让上层健康检查(if temps)能识别读取失败；
+            # 全 None 字典本身为真值，会把断线误判为成功采集。
+            if frame is None:
+                return {}
             return result
 
         except Exception as e:
             self.logger.error(f"读取温度数据异常: {e}")
             self._error_counter += 1
-            return result
+            return {}
 
     def read_temperature(self, point: str) -> Optional[float]:
         """读取单个温度点的数据

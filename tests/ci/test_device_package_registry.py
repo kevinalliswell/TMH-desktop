@@ -34,6 +34,7 @@ def _build_config() -> CommunicationConfig:
             ),
             slave_addresses={"N2": 2, "CO": 4},
             flow_scaling={"N2": 1.0, "CO": 0.1},
+            gas_safety_limits={"H2": 5.0, "CO": 5.0},
         ),
         temperature=TemperatureCommunicationConfig(
             serial=SerialPortConfig(
@@ -91,6 +92,7 @@ def test_registry_builds_external_adapters_when_packages_are_available(monkeypat
         poll_interval: float | None = None
         slave_addresses: dict[str, int] | None = None
         flow_scaling: dict[str, float] | None = None
+        gas_safety_limits: dict[str, float] | None = None
 
     class FakeBalancePackage:
         def __init__(self, config):
@@ -233,6 +235,9 @@ def test_registry_builds_external_adapters_when_packages_are_available(monkeypat
     assert mfc.set_sp_value("N2", 5.0) is True
     assert mfc.device.last_set_flow == ("N2", 5.0)
     assert mfc.device.config.slave_addresses == {"N2": 2, "CO": 4}
+    # Flammable-gas safety limits must be forwarded to the external MFC config so
+    # the package-backed path can enforce the same hard clamp as the legacy path.
+    assert mfc.device.config.gas_safety_limits == {"H2": 5.0, "CO": 5.0}
 
 
 def test_registry_falls_back_to_legacy_builders_when_packages_are_missing(monkeypatch):

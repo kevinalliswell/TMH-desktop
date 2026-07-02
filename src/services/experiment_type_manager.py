@@ -320,10 +320,35 @@ class ExperimentTypeManager:
                 
                 if type_id in exp_type_mapping:
                     exp_type = exp_type_mapping[type_id]
-                    return self.experiment_mode_manager.get_experiment_program(exp_type)
+                    # ExperimentModeManager exposes get_experiment_stages (not
+                    # get_experiment_program); convert StageSettings -> dict so the
+                    # return shape matches the custom-type branch below.
+                    stages = self.experiment_mode_manager.get_experiment_stages(exp_type)
+                    return [self._stage_settings_to_dict(s) for s in stages]
             except Exception as e:
                 self.logger.error(f"获取标准类型阶段信息失败: {str(e)}")
                 return []
         
         # 自定义类型从extra_data获取
         return type_info.extra_data.get("stages", [])
+
+    @staticmethod
+    def _stage_settings_to_dict(stage: Any) -> Dict[str, Any]:
+        """Convert a StageSettings object into the dict form used by get_type_stages."""
+        gas = getattr(stage, "gas_settings", None)
+        stage_enum = getattr(stage, "stage", None)
+        return {
+            "stage_name": getattr(stage_enum, "value", stage_enum),
+            "description": getattr(stage, "description", ""),
+            "target_temp": getattr(stage, "target_temp", None),
+            "temp_tolerance": getattr(stage, "temp_tolerance", None),
+            "duration": getattr(stage, "duration", None),
+            "heating_rate": getattr(stage, "heating_rate", None),
+            "gas_settings": {
+                "CO": getattr(gas, "CO", None),
+                "CO2": getattr(gas, "CO2", None),
+                "N2": getattr(gas, "N2", None),
+                "H2": getattr(gas, "H2", None),
+                "total_flow": getattr(gas, "total_flow", None),
+            } if gas is not None else {},
+        }

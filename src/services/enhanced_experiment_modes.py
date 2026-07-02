@@ -131,6 +131,18 @@ class EnhancedExperimentModeManager(ExperimentModeManager):
         
         return stages
     
+    def set_experiment_mode(self, experiment_type: ExperimentType) -> bool:
+        """设置标准实验模式。
+
+        必须清除 _current_custom_type，否则先选自定义模式、再切回标准模式时，
+        get_current_stage_settings / advance_to_next_stage 等仍会走自定义分支，
+        导致运行错误的气氛/温度程序。
+        """
+        success = super().set_experiment_mode(experiment_type)
+        if success:
+            self._current_custom_type = None
+        return success
+
     def set_custom_experiment_mode(self, custom_type_id: str) -> bool:
         """设置自定义实验模式"""
         if custom_type_id not in self._custom_programs:

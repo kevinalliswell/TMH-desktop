@@ -204,28 +204,28 @@ class MonitorPanel(QFrame):
         # 温度值样式
         style_updates.append(f"""
         QLabel#tempValue {{
-            font-size: {font_config['tempValue']}px !important;
+            font-size: {font_config['tempValue']}px;
         }}
         """)
         
         # 重量值样式
         style_updates.append(f"""
         QLabel#weightValue {{
-            font-size: {font_config['weightValue']}px !important;
+            font-size: {font_config['weightValue']}px;
         }}
         """)
         
         # 流量值样式
         style_updates.append(f"""
         QLabel#flowValue {{
-            font-size: {font_config['flowValue']}px !important;
+            font-size: {font_config['flowValue']}px;
         }}
         """)
         
         # 主标签样式
         style_updates.append(f"""
         QLabel#mainLabel {{
-            font-size: {font_config['mainLabel']}px !important;
+            font-size: {font_config['mainLabel']}px;
         }}
         """)
         

@@ -74,13 +74,16 @@ class BalanceClient(BaseDevice):
         self.logger.info(f"========== {self.device_type} 重量采集启动 ==========")
         
         read_interval = 0.1  # 读取间隔(秒)
-        
+        consecutive_errors = 0
+        max_consecutive_errors = 5
+
         while not self.stop_event.is_set():
             try:
                 # 如果连接不健康，尝试智能重连
                 if not self.connection_healthy:
                     if self.smart_reconnect():
                         self.logger.info(f"{self.device_type} 连接已恢复，继续重量采集")
+                        consecutive_errors = 0
                     else:
                         time.sleep(1.0)
                         continue
@@ -108,12 +111,32 @@ class BalanceClient(BaseDevice):
                             finally:
                                 # 恢复原始超时
                                 ser.timeout = original_timeout
+
+                            # 本轮串口读取正常，刷新健康状态
+                            self.connection_healthy = True
+                            self.last_successful_read = time.time()
+                            consecutive_errors = 0
+                        else:
+                            # 串口不可用：累计错误，超过阈值则标记断线以触发智能重连
+                            consecutive_errors += 1
+                            if consecutive_errors >= max_consecutive_errors:
+                                self.logger.error(f"{self.device_type} 连续 {consecutive_errors} 次串口不可用，标记连接不健康")
+                                self.connection_healthy = False
+                                consecutive_errors = 0
                 
                 # 短暂休眠
                 time.sleep(read_interval)
                 
             except Exception as e:
+                # 读取异常（如断线）：累计错误，超过阈值则关闭串口并标记断线，
+                # 使下一轮循环进入 smart_reconnect 恢复流程
+                consecutive_errors += 1
                 self.logger.error(f"重量采集异常: {e}")
+                if consecutive_errors >= max_consecutive_errors:
+                    self.logger.error(f"{self.device_type} 连续 {consecutive_errors} 次异常，标记连接不健康")
+                    self.connection_healthy = False
+                    self.close_serial_port()
+                    consecutive_errors = 0
                 time.sleep(0.5)  # 出错后短暂休眠
         
         self.logger.info(f"========== {self.device_type} 重量采集停止 ==========")

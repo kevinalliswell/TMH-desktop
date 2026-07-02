@@ -41,11 +41,21 @@ class MfcCplProtocol:
 
     def parse_response(self, response: bytes) -> Optional[float]:
         try:
-            cleaned_data = response.strip(b"\x02\x03\r").decode("utf-8")
-            parts = cleaned_data.split(",")
+            text = response.decode("utf-8", errors="ignore")
+            # Real device frames are: <STX>ADDR,VALUE<ETX><checksum>\r\n
+            # Drop the leading STX and everything from the first ETX onward
+            # (checksum + CRLF) so the trailing framing never leaks into the
+            # numeric field. The old str.strip() approach left "\r\n" (and the
+            # interior ETX) attached, making every real reply fail to parse.
+            stx = text.find(self.STX)
+            if stx != -1:
+                text = text[stx + 1:]
+            etx = text.find(self.ETX)
+            if etx != -1:
+                text = text[:etx]
+            parts = text.split(",")
             if len(parts) >= 2:
-                data_part = parts[1]
-                return float(data_part) / 10
+                return float(parts[1].strip()) / 10
             return None
         except Exception:
             return None

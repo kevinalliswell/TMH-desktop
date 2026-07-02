@@ -29,8 +29,10 @@ class ReductionExperimentData(BaseExperimentData):
     铁矿石还原性实验 (GB/T 13241-2017) 数据模型
     """
     # 实验特定输入参数
-    initial_sample_weight_g: float # 样品初始重量 (克)
-    oxygen_content_percentage: float # 样品中总铁对应的氧含量或实验中用于计算失氧量的氧含量 (%)
+    # NOTE: dataclass inheritance requires these to carry defaults because the
+    # base class (BaseExperimentData) already declares fields with defaults.
+    initial_sample_weight_g: float = 0.0 # 样品初始重量 (克)
+    oxygen_content_percentage: float = 0.0 # 样品中总铁对应的氧含量或实验中用于计算失氧量的氧含量 (%)
 
     # 实验过程中记录的关键数据序列 (可选，也可以从raw_data_log中提取)
     timestamps: List[datetime] = field(default_factory=list)
@@ -58,7 +60,7 @@ class RDIExperimentData(BaseExperimentData):
     RDI: Reduction Degradation Index
     """
     # 实验特定输入参数
-    initial_sample_mass_g: float # 还原前试样总质量 (克)
+    initial_sample_mass_g: float = 0.0 # 还原前试样总质量 (克)
 
     # 实验结束后测量的各粒级筛分质量
     sieve_data_g: Dict[str, float] = field(default_factory=dict)
@@ -96,7 +98,7 @@ class SwellingExperimentData(BaseExperimentData):
     SI: Swelling Index
     """
     # 实验特定输入参数
-    number_of_pellets_tested: int
+    number_of_pellets_tested: int = 0
 
     # 每个球团的详细数据
     pellets_data: List[PelletData] = field(default_factory=list)
@@ -107,4 +109,4 @@ class SwellingExperimentData(BaseExperimentData):
     # 'average_initial_diameter_mm': float
     # 'average_final_diameter_mm': float
     # 'average_initial_volume_cm3': float
-    # 'average_final_volume_cm3': float 
+    # 'average_final_volume_cm3': float 
