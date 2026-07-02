@@ -567,9 +567,12 @@ class DataHandler(QObject):
             # 获取样品温度（假设T8是样品温度）
             sample_temp = temperature_data.get("T8", 0.0) if temperature_data else 0.0
             
-            # 获取重量数据
-            current_weight = weight_data.get("weight", 0.0) if weight_data else 0.0
-            
+            # 获取重量数据（天平断线时 weight 可能为 None，dict.get 的默认值不会生效，
+            # 需显式兜底为 0.0，否则后续减重率计算会 TypeError 并静默丢弃整点数据）
+            current_weight = (weight_data or {}).get("weight")
+            if current_weight is None:
+                current_weight = 0.0
+
             # 计算减重率
             weight_loss = 0.0
             if self.initial_weight and self.initial_weight > 0:

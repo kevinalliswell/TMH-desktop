@@ -20,6 +20,10 @@ class MfcDeviceConfig:
     timeout: float
     slave_addresses: dict[str, int] = field(default_factory=dict)
     flow_scaling: dict[str, float] = field(default_factory=dict)
+    # Upper flow limits (L/min) for flammable gases (H2/CO). Enforced as a hard
+    # clamp before any setpoint is written to the MFC (mirrors the legacy
+    # MultiMFCClient safety behaviour). Missing gas => no clamp; 0 always passes.
+    gas_safety_limits: dict[str, float] = field(default_factory=dict)
     poll_interval: float | None = None
 
 
@@ -130,6 +134,8 @@ class MfcDevice:
         if address is None or device is None:
             return False
 
+        flow_value = self._clamp_flow(gas_name, flow_value)
+
         try:
             raw_value = self._to_raw_value(gas_name, flow_value)
             self._bus.write_registers(address, RAMAddress.OPERATION_MODE, [MODE_CONTROL])
@@ -148,6 +154,17 @@ class MfcDevice:
         except Exception as exc:
             self._last_error = str(exc)
             return False
+
+    def _clamp_flow(self, gas_name: str, flow_value: float) -> float:
+        """Hard-clamp a requested setpoint to the flammable-gas safety limit.
+
+        Only an upper bound is applied; a zero setpoint (safety atmosphere) must
+        always pass. Gases without a configured limit are never clamped.
+        """
+        limit = self.config.gas_safety_limits.get(gas_name)
+        if limit is not None and flow_value > limit:
+            return float(limit)
+        return flow_value
 
     def _apply_scaling(self, gas_name: str, raw_value: int | float) -> float:
         scaling = self.config.flow_scaling.get(gas_name, 0.1)

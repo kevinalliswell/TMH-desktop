@@ -128,8 +128,10 @@ class ExperimentDialog(QDialog):
                 "GB/T 13241-2017 铁矿石还原性能的测定", 
                 "GB/T 13242-2017 铁矿石低温粉化指数的测定"
             ]
-            for i, type_name in enumerate(default_types):
-                self.exp_type.addItem(type_name, f"GB_1324{i}_2017" if i < 3 else f"GB_1324{i-3}_2018")
+            # 与 default_types 一一对应的标准类型ID（注意 13240 为 2018 版）
+            default_type_ids = ["GB_13240_2018", "GB_13241_2017", "GB_13242_2017"]
+            for type_name, type_id in zip(default_types, default_type_ids):
+                self.exp_type.addItem(type_name, type_id)
 
     def reset_settings(self):
         """重置设置"""

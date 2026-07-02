@@ -173,6 +173,7 @@ class DevicePackageRegistry:
                 timeout=serial_cfg.timeout,
                 slave_addresses=dict(config.mfc.slave_addresses),
                 flow_scaling=dict(config.mfc.flow_scaling),
+                gas_safety_limits=dict(config.mfc.gas_safety_limits),
                 poll_interval=config.performance.data_collection_interval,
             )
         )

@@ -21,11 +21,12 @@ class ChartTabs(QTabWidget):
         self.temp_plot.setLabel('left', '温度', units='°C')
         self.temp_plot.setLabel('bottom', '时间', units='min')
         self.temp_curves = {}
+        # addLegend 必须在 plot 之前调用，否则图例捕获不到随后添加的曲线（图例为空）
+        self.temp_plot.addLegend()
         colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k', 'w', 'orange']
         for i in range(9):
             pen_color = colors[i % len(colors)]
             self.temp_curves[f'T{i+1}'] = self.temp_plot.plot(pen=pen_color, name=f'T{i+1}')
-        self.temp_plot.addLegend()
         self.addTab(self.temp_plot, "温度")
 
         # 流量图表 - 显示所有MFC
@@ -33,19 +34,20 @@ class ChartTabs(QTabWidget):
         self.flow_plot.setLabel('left', '流量', units='L/min')
         self.flow_plot.setLabel('bottom', '时间', units='min')
         self.flow_curves = {}
+        self.flow_plot.addLegend()
         gases = ['N2', 'CO', 'CO2', 'H2']
         colors = ['r', 'g', 'b', 'c']
         for i, gas in enumerate(gases):
             pen_color = colors[i % len(colors)]
             self.flow_curves[gas] = self.flow_plot.plot(pen=pen_color, name=gas)
-        self.flow_plot.addLegend()
         self.addTab(self.flow_plot, "流量")
 
         # 重量图表
         self.weight_plot = pg.PlotWidget(title="重量曲线 (时间: min)")
         self.weight_plot.setLabel('left', '重量', units='g')
         self.weight_plot.setLabel('bottom', '时间', units='min')
-        self.weight_curve = self.weight_plot.plot(pen="g")
+        self.weight_plot.addLegend()
+        self.weight_curve = self.weight_plot.plot(pen="g", name="重量")
         self.addTab(self.weight_plot, "重量")
 
         # 数据表格 - 添加失重和失重率列
@@ -89,6 +91,15 @@ class ChartTabs(QTabWidget):
         flows = snapshot.flows
         weight_value = snapshot.weight
 
+        # Advance the shared time axis exactly once per frame. Appending it inside
+        # each of the three _update_* methods made _time_minutes grow ~3x faster
+        # than any per-series list and corrupted the X-axis of the live curves.
+        if temperatures or flows or (weight_value is not None):
+            if self._experiment_start_time is None:
+                self._experiment_start_time = t
+            self._time.append(t)
+            self._time_minutes.append((t - self._experiment_start_time) / 60.0)
+
         if temperatures:
             self._update_temperatures(t, temperatures)
         if flows:
@@ -108,11 +119,7 @@ class ChartTabs(QTabWidget):
     def _update_temperatures(self, t: float, temperatures: dict):
         if not temperatures or not isinstance(temperatures, dict):
             return
-        self._time.append(t)
-        if self._experiment_start_time is None:
-            self._experiment_start_time = t
-        minutes = (t - self._experiment_start_time) / 60.0
-        self._time_minutes.append(minutes)
+        # Time axis is advanced once per frame in update_from_frames.
         for sensor, value in temperatures.items():
             if sensor in self._temperatures:
                 if value is None or not isinstance(value, (int, float)) or value != value:
@@ -134,10 +141,7 @@ class ChartTabs(QTabWidget):
     def _update_flows(self, t: float, flows: dict):
         if not flows or not isinstance(flows, dict):
             return
-        self._time.append(t)
-        if self._experiment_start_time is not None:
-            minutes = (t - self._experiment_start_time) / 60.0
-            self._time_minutes.append(minutes)
+        # Time axis is advanced once per frame in update_from_frames.
         for gas, flow_val in flows.items():
             if gas in self._flows:
                 if flow_val is None or not isinstance(flow_val, (int, float)) or flow_val != flow_val:
@@ -166,10 +170,7 @@ class ChartTabs(QTabWidget):
     def _update_weight(self, t: float, value: float):
         if value is None or not isinstance(value, (int, float)) or value != value:
             return
-        self._time.append(t)
-        if self._experiment_start_time is not None:
-            minutes = (t - self._experiment_start_time) / 60.0
-            self._time_minutes.append(minutes)
+        # Time axis is advanced once per frame in update_from_frames.
         self._weight.append(value)
         if self._experiment_start_time is not None and self._time_minutes:
             min_length = min(len(self._time_minutes), len(self._weight))
@@ -321,9 +322,12 @@ class ChartTabs(QTabWidget):
         
         # 清空内部数据存储，但保持实验开始时间为None
         # 这样下次数据更新时会重新设置开始时间
-        self._temperatures = {}
-        self._flows = {}
+        # 保留传感器/气体键，否则 _update_* 的 `if sensor in self._temperatures`
+        # 守卫会一直为假，清空后再也记录不到任何温度/流量点。
+        self._temperatures = {f'T{i+1}': [] for i in range(9)}
+        self._flows = {'N2': [], 'CO': [], 'CO2': [], 'H2': []}
         self._weight = []
+        self._time = []
         self._time_minutes = []
         # 注意：不清空 _experiment_start_time，让下次数据更新时重新设置
         

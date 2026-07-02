@@ -458,9 +458,10 @@ class ExperimentDatabase:
                     ON experiment_data(experiment_id, timestamp)
                 """)
                 
-                # 执行VACUUM优化
+                # VACUUM 不能在事务中执行，先提交前面的 DELETE/索引重建
+                conn.commit()
                 cursor.execute("VACUUM")
-                
+
                 logger.info(f"数据库修复完成，删除了 {deleted_orphans} 条孤立记录")
                 return True
                 
