@@ -21,11 +21,12 @@ class ChartTabs(QTabWidget):
         self.temp_plot.setLabel('left', '温度', units='°C')
         self.temp_plot.setLabel('bottom', '时间', units='min')
         self.temp_curves = {}
+        # addLegend 必须在 plot 之前调用，否则图例捕获不到随后添加的曲线（图例为空）
+        self.temp_plot.addLegend()
         colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k', 'w', 'orange']
         for i in range(9):
             pen_color = colors[i % len(colors)]
             self.temp_curves[f'T{i+1}'] = self.temp_plot.plot(pen=pen_color, name=f'T{i+1}')
-        self.temp_plot.addLegend()
         self.addTab(self.temp_plot, "温度")
 
         # 流量图表 - 显示所有MFC
@@ -33,19 +34,20 @@ class ChartTabs(QTabWidget):
         self.flow_plot.setLabel('left', '流量', units='L/min')
         self.flow_plot.setLabel('bottom', '时间', units='min')
         self.flow_curves = {}
+        self.flow_plot.addLegend()
         gases = ['N2', 'CO', 'CO2', 'H2']
         colors = ['r', 'g', 'b', 'c']
         for i, gas in enumerate(gases):
             pen_color = colors[i % len(colors)]
             self.flow_curves[gas] = self.flow_plot.plot(pen=pen_color, name=gas)
-        self.flow_plot.addLegend()
         self.addTab(self.flow_plot, "流量")
 
         # 重量图表
         self.weight_plot = pg.PlotWidget(title="重量曲线 (时间: min)")
         self.weight_plot.setLabel('left', '重量', units='g')
         self.weight_plot.setLabel('bottom', '时间', units='min')
-        self.weight_curve = self.weight_plot.plot(pen="g")
+        self.weight_plot.addLegend()
+        self.weight_curve = self.weight_plot.plot(pen="g", name="重量")
         self.addTab(self.weight_plot, "重量")
 
         # 数据表格 - 添加失重和失重率列
