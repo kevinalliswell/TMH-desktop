@@ -6,6 +6,42 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 ## [Unreleased]
 
+## [1.6.260702] - 2026-07-02
+
+### Added
+
+- Single-instance guard: only one application instance may run at a time, so a
+  second launch cannot fight over the exclusive serial ports / device buses.
+  Uses QLockFile with owner PID/host recording and stale-lock recovery (#26).
+- System audit log: key operations (app start/exit, experiment start/stop/
+  complete/mode change, gas setpoint, balance tare, data export/report,
+  password verify/change) are recorded as structured JSON in a dedicated,
+  daily-rotating logs/audit.log (#34).
+
+### Fixed
+
+- GB/T 13241 reduction degree: oxygen content is now treated as a percentage,
+  fixing a result that was 100x too small (#41).
+- Temperature read failures no longer masquerade as success (all-None dict was
+  truthy), so disconnects are detected and reconnect is triggered (#42).
+- Live charts: the shared time axis is advanced once per frame, fixing X-axis
+  corruption of the temperature/flow/weight curves (#43).
+- Flammable-gas (H2/CO) safety clamp is now enforced on the external MFC package
+  path, not only the legacy client (#44).
+- MFC CPL responses with real device framing (ETX + checksum + CRLF) now parse
+  correctly instead of returning None (#45).
+- database.repair_database commits before VACUUM so the repair no longer fails (#46).
+- experiment_type_manager returns standard-type stages via get_experiment_stages
+  instead of a missing method that silently returned an empty list (#47).
+- Switching from a custom experiment mode back to a standard mode clears the
+  stale custom-type state (#48).
+- Empty 备注/notes no longer blocks starting an experiment (#49).
+- Balance weight of None no longer drops experiment data points (#50).
+- Balance client tracks health and reconnects after a mid-session disconnect (#51).
+- experiment_data dataclasses import correctly (dataclass field ordering) (#40).
+- Chart legends now populate (legend is created before the curves); About page
+  shows the real version; minor cleanups (Qt stylesheet, fallback ids, logs).
+
 ## [1.5.260625] - 2026-06-25
 
 ### Fixed

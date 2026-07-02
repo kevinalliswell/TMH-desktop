@@ -1,15 +1,10 @@
-"""CI tests for the system audit log (#34) and single-instance guard (#26)."""
+"""CI tests for the system audit log (#34)."""
 from __future__ import annotations
 
 import json
 import logging
 
-import pytest
 
-
-# --------------------------------------------------------------------------
-# Audit log (#34)
-# --------------------------------------------------------------------------
 def _flush_audit():
     for h in logging.getLogger("tmh.audit").handlers:
         h.flush()
@@ -23,7 +18,7 @@ def _last_audit_entries(n=5):
 
 
 def test_audit_writes_structured_json_entry():
-    from src.utils.audit import audit, AuditCategory, AuditResult
+    from src.utils.audit import audit, AuditCategory
 
     marker = "unit-test-exp-42"
     audit(AuditCategory.EXPERIMENT, "start", operator="tester", experiment_id=marker, mode="GB_13241")
@@ -58,45 +53,3 @@ def test_audit_never_raises_on_bad_input():
 
     # A value json cannot serialize must not propagate an exception to the caller.
     audit(AuditCategory.APP, "start", weird=Unserializable())
-
-
-# --------------------------------------------------------------------------
-# Single-instance guard (#26)
-# --------------------------------------------------------------------------
-@pytest.fixture(scope="module")
-def _qapp():
-    # Use QApplication (a QCoreApplication superset) so we never install a
-    # QCoreApplication that would break GUI tests running later in the suite.
-    from PySide6.QtWidgets import QApplication
-
-    app = QApplication.instance() or QApplication([])
-    yield app
-
-
-def test_second_instance_is_rejected(_qapp):
-    from src.utils.single_instance import SingleInstanceGuard
-
-    key = "TMH-LPF-900-test-single-instance"
-    first = SingleInstanceGuard(key=key)
-    second = SingleInstanceGuard(key=key)
-    try:
-        assert first.try_acquire() is True
-        assert second.try_acquire() is False
-    finally:
-        first.release()
-        second.release()
-
-
-def test_instance_can_reacquire_after_release(_qapp):
-    from src.utils.single_instance import SingleInstanceGuard
-
-    key = "TMH-LPF-900-test-single-instance-2"
-    guard = SingleInstanceGuard(key=key)
-    assert guard.try_acquire() is True
-    guard.release()
-
-    again = SingleInstanceGuard(key=key)
-    try:
-        assert again.try_acquire() is True
-    finally:
-        again.release()

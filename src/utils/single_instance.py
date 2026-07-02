@@ -1,54 +1,51 @@
-"""单实例运行保护 (Issue #26)。
+"""Single-instance guard (issue #26).
 
-桌面程序若被重复启动，第二个实例会与第一个实例争抢同一批串口 / 总线资源，
-造成设备通信冲突。本模块基于 :class:`QSharedMemory` 提供跨平台的单实例检测：
-第一个实例创建一段命名共享内存并在整个进程生命周期内持有；后续实例创建失败，
-即可判定已有实例在运行。
+Only one TMH instance may run at a time, because the serial ports / device buses
+are exclusive resources held by the first instance. A second launch must be
+refused with a prompt instead of silently failing to talk to the hardware.
 
-Windows（生产目标平台）在进程退出时会自动释放共享内存段；POSIX 上进程异常
-崩溃可能残留段，故创建前先尝试 attach/detach 清理陈旧段。
+Uses ``QLockFile``: it stores the owner PID/host and automatically reclaims a
+stale lock left behind by a crashed previous instance, so a crash does not
+permanently block future launches.
 """
+from __future__ import annotations
 
-from PySide6.QtCore import QSharedMemory
+import os
+from typing import Optional
 
-# 共享内存键需在本应用内唯一且稳定
-SINGLE_INSTANCE_KEY = "TMH-LPF-900-single-instance"
+from PySide6.QtCore import QDir, QLockFile
+
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+_DEFAULT_APP_ID = "TMH-LPF-900"
+# Reclaim a lock whose owner process is gone after this many ms (crash recovery).
+_STALE_LOCK_MS = 30_000
 
 
-class SingleInstanceGuard:
-    """基于共享内存的单实例守卫。
+def lock_file_path(app_id: str = _DEFAULT_APP_ID) -> str:
+    """Absolute path of the single-instance lock file (in the system temp dir)."""
+    return os.path.join(QDir.tempPath(), f"{app_id}.lock")
 
-    典型用法::
 
-        guard = SingleInstanceGuard()
-        if not guard.try_acquire():
-            # 已有实例在运行，提示并退出
-            ...
-        # 需在应用整个生命周期内持有 guard 引用，避免被 GC 释放
+def acquire_single_instance_lock(app_id: str = _DEFAULT_APP_ID) -> Optional[QLockFile]:
+    """Try to acquire the single-instance lock.
+
+    Returns the held ``QLockFile`` on success — the caller MUST keep it alive for
+    the whole application lifetime (let it go out of scope and the lock releases).
+    Returns ``None`` if another live instance already holds the lock.
     """
+    lock = QLockFile(lock_file_path(app_id))
+    lock.setStaleLockTime(_STALE_LOCK_MS)
 
-    def __init__(self, key: str = SINGLE_INSTANCE_KEY):
-        self._shared = QSharedMemory(key)
-        self._acquired = False
+    if lock.tryLock(100):
+        return lock
 
-    def try_acquire(self) -> bool:
-        """尝试获取单实例锁。
-
-        Returns:
-            bool: 获取成功（当前为唯一实例）返回 True；已有实例在运行返回 False。
-        """
-        # 清理异常退出遗留的共享内存段（仅 POSIX 需要；Windows 会自动释放）。
-        # 若确有其它实例存活，其自身仍持有该段，create() 仍会失败。
-        if self._shared.attach():
-            self._shared.detach()
-
-        if self._shared.create(1):
-            self._acquired = True
-            return True
-        return False
-
-    def release(self) -> None:
-        """释放单实例锁（进程退出前调用；正常退出时可省略）。"""
-        if self._acquired and self._shared.isAttached():
-            self._shared.detach()
-            self._acquired = False
+    # 已被占用：记录持有者信息用于诊断（getLockInfo 返回形态随平台/版本而异，容错处理）。
+    try:
+        info = lock.getLockInfo()
+    except Exception:
+        info = None
+    logger.warning(f"单实例锁已被占用，拒绝启动第二个实例。持有者信息: {info}")
+    return None
