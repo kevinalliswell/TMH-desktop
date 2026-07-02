@@ -8,6 +8,7 @@ from src.application.dto import ExperimentDetailDTO
 from src.application.services.history_query_service import HistoryQueryService
 from src.utils.logger import get_logger
 from src.utils.path_manager import PathManager
+from src.utils.audit import audit, AuditCategory, AuditResult
 
 
 class UnsupportedReportTypeError(ValueError):
@@ -46,8 +47,12 @@ class ReportExportService:
         elif fmt == "xlsx":
             self._export_xlsx(detail, path)
         else:
+            audit(AuditCategory.EXPORT, "export_data", result=AuditResult.FAILURE,
+                  experiment_id=experiment_id, format=fmt)
             raise ValueError(f"不支持的文件格式: {fmt}")
 
+        audit(AuditCategory.EXPORT, "export_data",
+              experiment_id=experiment_id, format=fmt, path=str(path))
         return str(path)
 
     def generate_html_report(self, experiment_id: str) -> str:
@@ -68,12 +73,15 @@ class ReportExportService:
                 f"实验 '{detail.experiment_name}' (类型: {detail.experiment_type or '未知类型'}) 暂不支持报告生成"
             )
 
-        return self._save_html_report(
+        saved_path = self._save_html_report(
             content,
             prefix=prefix,
             experiment_name=detail.experiment_name,
             experiment_id=detail.experiment_id,
         )
+        audit(AuditCategory.EXPORT, "generate_report",
+              experiment_id=detail.experiment_id, report_category=category, path=saved_path)
+        return saved_path
 
     @staticmethod
     def detect_experiment_category(experiment_type: str) -> str:

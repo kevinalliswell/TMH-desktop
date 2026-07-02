@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 
 from src.device_clients.base_device import BaseDevice
 from tmh_comm.protocols.balance_rs232 import BalanceRs232Protocol
+from src.utils.audit import audit, AuditCategory, AuditResult
 
 
 class BalanceClient(BaseDevice):
@@ -154,6 +155,7 @@ class BalanceClient(BaseDevice):
 
         if not self.serial_port_available:
             self.logger.warning("设备未连接，跳过天平去皮指令")
+            audit(AuditCategory.BALANCE, "tare", result=AuditResult.REJECTED, reason="device_not_connected")
             return False
 
         # 暂停数据采集
@@ -215,6 +217,7 @@ class BalanceClient(BaseDevice):
                         if result.weight is not None:
                             self._cache_weight(result.weight)
                         self.logger.info(f"========== 天平去皮成功（{reason}{weight_info}） ==========")
+                        audit(AuditCategory.BALANCE, "tare", weight=result.weight)
                         return True
 
                     self.logger.warning("========== 天平去皮命令未能确认执行 ==========")

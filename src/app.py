@@ -15,15 +15,36 @@ def main():
     logger = get_logger("App")
     window = None
     app = None
+    exit_code = 0
 
     try:
         from PySide6.QtWidgets import QApplication
         from src.ui.main_window import MainWindow
 
         app = QApplication(sys.argv)
+
+        # 单实例保护：避免重复启动的实例争抢串口/总线资源 (Issue #26)
+        from src.utils.single_instance import SingleInstanceGuard
+        from src.utils.audit import audit, AuditCategory, AuditResult
+
+        single_instance = SingleInstanceGuard()
+        if not single_instance.try_acquire():
+            from PySide6.QtWidgets import QMessageBox
+            logger.warning("检测到已有实例在运行，本次启动已被阻止")
+            audit(AuditCategory.APP, "start_blocked",
+                  result=AuditResult.REJECTED, reason="another_instance_running")
+            QMessageBox.warning(
+                None,
+                "程序已在运行",
+                "TMH-LPF-900 已经在运行中，请勿重复启动。\n\n"
+                "串口与总线资源已被现有实例占用，重复启动会导致设备通信冲突。",
+            )
+            return
+
         window = MainWindow()
         window.show()
 
+        audit(AuditCategory.APP, "start")
         logger.info("应用程序启动成功")
         exit_code = app.exec()
 
@@ -41,6 +62,11 @@ def main():
         except Exception as cleanup_err:
             logger.error(f"退出清理时发生错误: {cleanup_err}")
 
+        try:
+            from src.utils.audit import audit, AuditCategory
+            audit(AuditCategory.APP, "exit", exit_code=exit_code)
+        except Exception:
+            pass
         logger.info("应用程序退出")
 
     sys.exit(exit_code)
