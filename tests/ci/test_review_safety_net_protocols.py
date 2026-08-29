@@ -14,7 +14,7 @@ Three kinds of tests live in the safety-net files:
 """
 import pytest
 
-from tmh_comm.protocols.mfc_cpl import MfcCplProtocol
+from tmh_comm.protocols.mfc_cpl import MfcCplProtocol, _cpl_checksum
 from tmh_comm.protocols.temp_rtu import TempRtuProtocol, _crc16_modbus
 
 cpl = MfcCplProtocol()
@@ -28,9 +28,15 @@ def make_temp_frame(addr: int, raw_registers) -> bytes:
     return body + _crc16_modbus(body)
 
 
-def cpl_reply(slave: int, raw_value: int, checksum: bytes = b"9A") -> bytes:
-    # Real device frame: <STX>ADDR,VALUE<ETX><checksum>\r\n
-    return b"\x02" + f"{slave:02d},{raw_value}".encode() + b"\x03" + checksum + b"\r\n"
+def cpl_reply(slave: int, raw_value: int, checksum: bytes | None = None) -> bytes:
+    # Real device frame: <STX>ADDR,VALUE<ETX><checksum>\r\n. The checksum is
+    # computed the same way the protocol's build_* commands do (STX..ETX
+    # inclusive) so this fixture remains a genuinely valid frame once #69 adds
+    # checksum validation; pass an explicit checksum to corrupt it.
+    framed = "\x02" + f"{slave:02X},{raw_value}" + "\x03"
+    if checksum is None:
+        checksum = _cpl_checksum(framed).encode()
+    return framed.encode() + checksum + b"\r\n"
 
 
 # --- temp_rtu.parse_read_all -------------------------------------------------
