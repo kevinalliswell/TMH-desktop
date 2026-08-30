@@ -1,6 +1,5 @@
 # src/ui/main_window.py
 import os
-import json
 import logging
 from dataclasses import dataclass
 
@@ -35,6 +34,7 @@ from src.services.database import ExperimentDatabase
 from src.services.experiment_facade import ExperimentFacade
 from src.services.experiment_modes import ExperimentModeManager
 from src.utils.password_manager import PasswordManager
+from src.utils.software_info import load_software_info
 
 
 @dataclass
@@ -211,7 +211,7 @@ class MainWindow(QMainWindow):
             self.history_query_page,
             self.comm_settings_page,
             HelpPage(),
-            AboutPage(),
+            AboutPage(self.software_info),
         ]
 
         for page in pages:
@@ -282,18 +282,7 @@ class MainWindow(QMainWindow):
             self.logger.warning(f"样式文件不存在: {qss_path}")
 
     def _load_software_info(self):
-        from src.utils.path_manager import PathManager
-        info_path = PathManager.get_config_path("software.info")
-        if not os.path.exists(info_path):
-            return {
-                "version": "1.0.0",
-                "author": "北京科技大学",
-                "description": "TMH-LPF-900 铁矿石全性能综合检测与控制系统",
-                "release_date": "2024-01-20",
-                "copyright": "© 2024 北京科技大学",
-            }
-        with open(info_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        return load_software_info()
 
     def changeEvent(self, event):
         """窗体状态变化事件处理"""
