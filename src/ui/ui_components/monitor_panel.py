@@ -196,7 +196,6 @@ class MonitorPanel(QFrame):
         self.current_mode = mode
         font_config = self.font_sizes[mode]
         
-        # print(f"[DEBUG] 调整字体大小到 {mode} 模式: {font_config}")  # 调试信息
         
         # 通过设置样式表来覆盖CSS，确保字体大小生效
         style_updates = []
@@ -245,7 +244,6 @@ class MonitorPanel(QFrame):
         Args:
             is_maximized (bool): 窗体是否最大化
         """
-        # print(f"[DEBUG] 收到窗体状态变化通知: {'最大化' if is_maximized else '正常'}")
         # 延迟调整字体大小，确保布局已经完成
         QTimer.singleShot(100, lambda: self.adjust_font_size(is_maximized))
     
@@ -255,7 +253,6 @@ class MonitorPanel(QFrame):
         """
         current_maximized = self.current_mode == 'maximized'
         new_state = not current_maximized
-        # print(f"[TEST] 切换字体状态: {self.current_mode} -> {'maximized' if new_state else 'normal'}")
         self.adjust_font_size(new_state)
 
     # ===================== 更新函数 =====================
