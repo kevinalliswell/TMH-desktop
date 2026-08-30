@@ -2,6 +2,11 @@
                                  QLabel, QDoubleSpinBox, QMessageBox)
 from PySide6.QtCore import Qt
 
+from src.utils.logger import get_logger
+
+
+logger = get_logger(__name__)
+
 class RDIAnalysisDialog(QDialog):
     def __init__(self, experiment_name: str, initial_weight_g: float, parent=None):
         super().__init__(parent)
@@ -111,7 +116,7 @@ if __name__ == '__main__':
     # Example usage:
     dialog = RDIAnalysisDialog(experiment_name="TestRDI-001", initial_weight_g=500.0)
     if dialog.exec():
-        print("分析参数已获取:", dialog.get_data())
+        logger.info("分析参数已获取: %s", dialog.get_data())
     else:
-        print("用户取消输入。")
-    sys.exit() 
+        logger.info("用户取消输入。")
+    sys.exit()

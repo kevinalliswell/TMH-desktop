@@ -190,22 +190,25 @@ class PathManager:
 
 # 单元测试
 if __name__ == "__main__":
-    print(f"项目根目录: {PathManager.get_project_root()}")
-    print(f"数据目录: {PathManager.get_data_path()}")
-    print(f"实验目录: {PathManager.get_experiments_path()}")
-    print(f"配置目录: {PathManager.get_config_path()}")
-    print(f"日志目录: {PathManager.get_logs_path()}")
-    print(f"资源目录: {PathManager.get_resources_path()}")
-    print(f"样式目录: {PathManager.get_styles_path()}")
-    print(f"导出目录: {PathManager.get_exports_path()}")
+    from src.utils.logger import get_logger
+
+    logger = get_logger(__name__)
+    logger.info("项目根目录: %s", PathManager.get_project_root())
+    logger.info("数据目录: %s", PathManager.get_data_path())
+    logger.info("实验目录: %s", PathManager.get_experiments_path())
+    logger.info("配置目录: %s", PathManager.get_config_path())
+    logger.info("日志目录: %s", PathManager.get_logs_path())
+    logger.info("资源目录: %s", PathManager.get_resources_path())
+    logger.info("样式目录: %s", PathManager.get_styles_path())
+    logger.info("导出目录: %s", PathManager.get_exports_path())
     
     # 测试特定文件路径
-    print(f"数据库文件: {PathManager.get_data_path('experiments.db')}")
-    print(f"配置文件: {PathManager.get_config_path('exp_settings.config')}")
-    print(f"日志文件: {PathManager.get_logs_path('app.log')}")
+    logger.info("数据库文件: %s", PathManager.get_data_path('experiments.db'))
+    logger.info("配置文件: %s", PathManager.get_config_path('exp_settings.config'))
+    logger.info("日志文件: %s", PathManager.get_logs_path('app.log'))
 
-    print(f"气氛控制程序配置文件: {PathManager.get_config_path('gas_programs')}")
-    print(f"温度控制程序配置文件: {PathManager.get_config_path('temp_programs')}")
+    logger.info("气氛控制程序配置文件: %s", PathManager.get_config_path('gas_programs'))
+    logger.info("温度控制程序配置文件: %s", PathManager.get_config_path('temp_programs'))
 
     # project_root = str(Path(__file__).resolve().parents[2])
     #

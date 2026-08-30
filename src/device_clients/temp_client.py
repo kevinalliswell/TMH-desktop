@@ -404,8 +404,11 @@ class TempClient(BaseDevice):
 
 
 if __name__ == "__main__":
+    from src.utils.logger import get_logger
     from src.utils.path_manager import PathManager
-    print(f"项目根目录: {PathManager.get_project_root()}")
+
+    logger = get_logger(__name__)
+    logger.info("项目根目录: %s", PathManager.get_project_root())
     
     # 读取配置文件
     config_path = PathManager.get_config_path('comm_config.json')
@@ -419,33 +422,33 @@ if __name__ == "__main__":
     try:
         # 启动线程
         temp_client.start()
-        print("温度数据采集已启动 (按Ctrl+C停止)...")
+        logger.info("温度数据采集已启动 (按Ctrl+C停止)...")
         
         # 测试采集循环
         for i in range(20):
             time.sleep(1)
             temps = temp_client.get_temperature_data()
-            print(f"\n=== 第 {i+1} 次采集 ===")
+            logger.info("=== 第 %s 次采集 ===", i + 1)
             for point, value in temps.items():
                 if point in temp_client.TEMP_POINTS:
                     desc = temp_client.get_description(point)
                     unit = temp_client.get_unit(point)
                     stable = temp_client.is_data_stable(point)
                     status = "稳定" if stable else "波动"
-                    print(f"{point} ({desc}): {value}{unit} [{status}]")
+                    logger.info("%s (%s): %s%s [%s]", point, desc, value, unit, status)
             
             # 每5次显示滤波统计信息
             if (i + 1) % 5 == 0:
                 stats = temp_client.get_filter_statistics()
                 if stats:
-                    print(f"\n滤波统计 (第{i+1}次):")
-                    print(f"  总处理: {stats['total_processed']}")
-                    print(f"  总滤波: {stats['total_filtered']}")
-                    print(f"  滤波率: {stats['filter_rate']:.1f}%")
+                    logger.info("滤波统计 (第%s次):", i + 1)
+                    logger.info("  总处理: %s", stats['total_processed'])
+                    logger.info("  总滤波: %s", stats['total_filtered'])
+                    logger.info("  滤波率: %.1f%%", stats['filter_rate'])
                     
     except KeyboardInterrupt:
-        print("\n用户中断，停止采集...")
+        logger.info("用户中断，停止采集...")
     finally:
         # 停止线程
         temp_client.stop()
-        print("温控器客户端已停止")
+        logger.info("温控器客户端已停止")

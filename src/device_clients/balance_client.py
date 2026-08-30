@@ -302,8 +302,11 @@ class BalanceClient(BaseDevice):
 
 
 if __name__ == "__main__":
+    from src.utils.logger import get_logger
     from src.utils.path_manager import PathManager
-    print(f"项目根目录: {PathManager.get_project_root()}")
+
+    logger = get_logger(__name__)
+    logger.info("项目根目录: %s", PathManager.get_project_root())
     
     # 读取配置文件
     config_path = PathManager.get_config_path('comm_config.json')
@@ -317,28 +320,28 @@ if __name__ == "__main__":
     try:
         # 启动线程
         balance_client.start()
-        print("天平数据采集已启动 (按Ctrl+C停止)...")
+        logger.info("天平数据采集已启动 (按Ctrl+C停止)...")
         
         # 测试采集循环
         for i in range(10):
             time.sleep(1)
             weight = balance_client.get_latest_weight()
-            print(f"当前重量: {weight}g")
+            logger.info("当前重量: %sg", weight)
         
         # 测试去皮功能
-        print("\n测试去皮功能...")
+        logger.info("测试去皮功能...")
         result = balance_client.send_tare_command()
-        print(f"去皮结果: {'成功' if result else '失败'}")
+        logger.info("去皮结果: %s", "成功" if result else "失败")
         
         # 继续采集一段时间
         for i in range(5):
             time.sleep(1)
             weight = balance_client.get_latest_weight()
-            print(f"去皮后重量: {weight}g")
+            logger.info("去皮后重量: %sg", weight)
             
     except KeyboardInterrupt:
-        print("\n用户中断，停止采集...")
+        logger.info("用户中断，停止采集...")
     finally:
         # 停止线程
         balance_client.stop()
-        print("天平客户端已停止")
+        logger.info("天平客户端已停止")

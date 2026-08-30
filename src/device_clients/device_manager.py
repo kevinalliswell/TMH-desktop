@@ -2,7 +2,6 @@
 import os
 import time
 import threading
-import traceback
 import atexit
 
 # 设备客户端类将通过外部注册，不在此处直接导入
@@ -569,9 +568,10 @@ class DeviceManager:
 
 # 使用示例（已简化为仅创建配置文件）
 if __name__ == "__main__":
+    logger = get_logger(__name__)
     try:
         config_path = PathManager.get_config_path("comm_config.json")
-        print(f"配置文件路径: {config_path}")
+        logger.info("配置文件路径: %s", config_path)
 
         # 初始化设备管理器
         dm = DeviceManager(config_path=config_path)
@@ -581,11 +581,9 @@ if __name__ == "__main__":
             os.makedirs(os.path.dirname(config_path), exist_ok=True)
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(dm._get_default_config(), f, indent=4)
-                print(f"已创建默认配置文件: {config_path}")
-        
-        print("设备管理器初始化完成，请通过 register_device() 方法注册设备")
+                logger.info("已创建默认配置文件: %s", config_path)
 
-    except Exception as e:
-        print(f"程序出现异常: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.info("设备管理器初始化完成，请通过 register_device() 方法注册设备")
+
+    except Exception:
+        logger.exception("程序出现异常")
