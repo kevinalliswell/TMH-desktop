@@ -1,17 +1,36 @@
-﻿from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel,
-                           QScrollArea, QFrame, QGroupBox)
-from PySide6.QtCore import Qt
+﻿from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                           QPushButton, QScrollArea, QFrame, QGroupBox)
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 import datetime
+import threading
 
+from src.services.update_service import UpdateCheckResult, UpdateService
+from src.utils.audit import audit, AuditCategory
 from src.utils.software_info import load_software_info
+
 
 class AboutPage(QWidget):
     """关于页面"""
-    
-    def __init__(self, software_info: dict | None = None):
+
+    update_check_finished = Signal(object)
+
+    def __init__(
+        self,
+        software_info: dict | None = None,
+        update_service=None,
+        auto_check: bool = True,
+    ):
         super().__init__()
         self.software_info = software_info or load_software_info()
+        self.update_service = update_service or UpdateService()
+        self._update_check_in_progress = False
+        self._release_url = None
+        self._update_thread = None
+        self.update_check_finished.connect(self._apply_update_result)
         self.init_ui()
+        if auto_check:
+            QTimer.singleShot(0, self.check_for_updates)
         
     def init_ui(self):
         # 设置页面对象名称，用于样式应用
@@ -41,6 +60,9 @@ class AboutPage(QWidget):
         
         # 添加系统信息卡片
         self.create_system_info_card(scroll_layout)
+
+        # 添加软件更新卡片
+        self.create_update_card(scroll_layout)
         
         # 添加功能特性卡片
         self.create_features_card(scroll_layout)
@@ -91,6 +113,85 @@ class AboutPage(QWidget):
         header_layout.addWidget(self.version_label)
         
         layout.addWidget(header_frame)
+
+    def create_update_card(self, layout):
+        """创建软件更新卡片"""
+        card = QGroupBox("软件更新")
+        card.setObjectName("aboutInfoCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(20, 30, 20, 20)
+        card_layout.setSpacing(10)
+
+        current_version = self.software_info.get("version", "unknown")
+        self.update_status_label = QLabel(f"当前版本 {current_version}，尚未检查更新。")
+        self.update_status_label.setObjectName("aboutCardContent")
+        self.update_status_label.setWordWrap(True)
+        card_layout.addWidget(self.update_status_label)
+
+        button_layout = QHBoxLayout()
+        self.check_update_button = QPushButton("检查更新")
+        self.check_update_button.clicked.connect(self.check_for_updates)
+        button_layout.addWidget(self.check_update_button)
+
+        self.download_button = QPushButton("前往下载")
+        self.download_button.clicked.connect(self.open_release_page)
+        self.download_button.setVisible(False)
+        button_layout.addWidget(self.download_button)
+        button_layout.addStretch()
+        card_layout.addLayout(button_layout)
+
+        layout.addWidget(card)
+
+    def check_for_updates(self):
+        """在后台线程检查最新 GitHub Release。"""
+        if self._update_check_in_progress:
+            return
+        self._update_check_in_progress = True
+        self.check_update_button.setEnabled(False)
+        self.download_button.setVisible(False)
+        self.update_status_label.setText("正在检查更新…")
+        self._update_thread = threading.Thread(
+            target=self._run_update_check,
+            name="tmh-update-check",
+            daemon=True,
+        )
+        self._update_thread.start()
+
+    def _run_update_check(self):
+        result = self.update_service.check(self.software_info.get("version", "unknown"))
+        self.update_check_finished.emit(result)
+
+    def _apply_update_result(self, result: UpdateCheckResult):
+        self._update_check_in_progress = False
+        self.check_update_button.setEnabled(True)
+        self._release_url = result.release_url
+
+        if result.error:
+            self.download_button.setVisible(False)
+            self.update_status_label.setText("暂时无法检查更新，请稍后重试。")
+            return
+
+        if result.update_available:
+            self.update_status_label.setText(
+                f"发现新版本 {result.latest_version}（当前 {result.current_version}）。"
+            )
+            self.download_button.setVisible(bool(result.release_url))
+            audit(
+                AuditCategory.APP,
+                "update_available",
+                current_version=result.current_version,
+                latest_version=result.latest_version,
+                release_url=result.release_url,
+            )
+        else:
+            self.download_button.setVisible(False)
+            self.update_status_label.setText(
+                f"当前版本 {result.current_version} 已是最新版本。"
+            )
+
+    def open_release_page(self):
+        if self._release_url:
+            QDesktopServices.openUrl(QUrl(self._release_url))
         
     def create_system_info_card(self, layout):
         """创建系统信息卡片"""
