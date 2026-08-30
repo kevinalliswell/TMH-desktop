@@ -330,66 +330,6 @@ class ExperimentController(QObject):
             self.logger.error(f"设置实验模式失败: {str(e)}")
             return False
     
-    def _check_device_availability(self) -> dict:
-        """
-        检查设备可用性
-        
-        Returns:
-            dict: 包含设备状态信息的字典
-        """
-        status = {
-            'has_any_device': False,
-            'available_devices': [],
-            'missing_devices': [],
-            'has_mfc': False,
-            'has_balance': False,
-            'has_temperature': False
-        }
-        
-        if not self.device_manager:
-            status['missing_devices'] = ['设备管理器未初始化']
-            return status
-        
-        try:
-            # 检查MFC设备
-            if (hasattr(self.device_manager, 'multi_mfc') and 
-                self.device_manager.multi_mfc and 
-                hasattr(self.device_manager.multi_mfc, 'serial_port_available') and
-                self.device_manager.multi_mfc.serial_port_available):
-                status['has_mfc'] = True
-                status['available_devices'].append('质量流量计')
-            else:
-                status['missing_devices'].append('质量流量计')
-            
-            # 检查天平设备
-            if (hasattr(self.device_manager, 'balance') and 
-                self.device_manager.balance and 
-                hasattr(self.device_manager.balance, 'serial_port_available') and
-                self.device_manager.balance.serial_port_available):
-                status['has_balance'] = True
-                status['available_devices'].append('电子天平')
-            else:
-                status['missing_devices'].append('电子天平')
-            
-            # 检查温控设备
-            if (hasattr(self.device_manager, 'temp') and 
-                self.device_manager.temp and 
-                hasattr(self.device_manager.temp, 'serial_port_available') and
-                self.device_manager.temp.serial_port_available):
-                status['has_temperature'] = True
-                status['available_devices'].append('温度控制器')
-            else:
-                status['missing_devices'].append('温度控制器')
-            
-            # 至少有一个设备可用才认为系统可以运行
-            status['has_any_device'] = len(status['available_devices']) > 0
-            
-        except Exception as e:
-            self.logger.error(f"检查设备状态时发生错误: {e}")
-            status['missing_devices'].append('设备状态检查失败')
-        
-        return status
-
     def _create_experiment_record(
         self, experiment_record: ExperimentData | None = None
     ) -> ExperimentData:
@@ -409,7 +349,7 @@ class ExperimentController(QObject):
         return experiment
 
     def _begin_experiment_common(self) -> None:
-        """实验启动的公共逻辑（提取自 start_experiment 和 _dev_start_experiment）"""
+        """执行经过校验的实验启动公共逻辑。"""
         now = time.time()
         self._sm.transition_to(
             ExperimentPhase.RUNNING,
@@ -546,41 +486,6 @@ class ExperimentController(QObject):
                 self._sm.reset()
             return False
 
-    def _dev_start_experiment(self) -> bool:
-        """开发模式：启动实验，模拟正式实验流程"""
-        try:
-            # 转入 CONFIGURING 阶段
-            self._sm.transition_to(ExperimentPhase.CONFIGURING)
-
-            # 创建实验数据对象
-            self.current_experiment = self._create_experiment_record()
-
-            # 执行公共启动逻辑（内部会转到 RUNNING）
-            self._begin_experiment_common()
-
-            self.logger.info(f"==============================================实验类型: {self.current_experiment_type}")
-            
-            self.status_updated.emit(f"实验运行中-{self.current_experiment_type_name}")
-            self.system_message_updated.emit(
-                f"开始实验: {self.experiment_params['sample_name']}"
-            )
-            self.experiment_started.emit()
-            
-            # 记录实验信息
-            if self.current_experiment_type:
-                self.logger.info(f"开始实验: {self.current_experiment_type.value}")
-            else:
-                self.logger.info(f"开始自定义实验: {self.current_experiment_type_name}")
-            self.logger.info(f"实验ID: {self.current_experiment.experiment_id}")
-            return True
-        except Exception as e:
-            self.logger.error(f"启动实验失败: {str(e)}")
-            try:
-                self._sm.transition_to(ExperimentPhase.IDLE)
-            except InvalidTransitionError:
-                self._sm.reset()
-            return False
-    
     def stop_experiment(self) -> bool:
         """停止自动实验"""
         if not self._sm.is_running:
@@ -923,14 +828,6 @@ class ExperimentController(QObject):
         time_str = self.get_experiment_duration_string()
         self.experiment_time_updated.emit(time_str)
 
-    def _dev_get_experiment_realtime_data(self) -> dict:
-        """开发模式：获取实验实时数据"""
-        return {
-            "experiment_id": self.current_experiment.experiment_id,
-            "experiment_name": self.current_experiment.experiment_name,
-            "sample_name": self.experiment_params['sample_name'],
-        }
-    
     def get_experiment_duration_string(self) -> str:
         """
         获取实验用时字符串
@@ -943,22 +840,6 @@ class ExperimentController(QObject):
         minutes = (elapsed % 3600) // 60
         seconds = elapsed % 60
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-    
-    def get_current_experiment_stage_name(self) -> str:
-        """
-        获取当前实验阶段名称
-        
-        Returns:
-            str: 阶段名称
-        """
-        if not self._sm.is_running or not self.current_experiment_type:
-            return "无实验"
-        
-        current_stage = self.experiment_mode_manager.get_current_stage_settings()
-        if current_stage:
-            return f"{current_stage.stage.value}-{current_stage.description}"
-        else:
-            return "实验完成"
     
     def is_experiment_running(self) -> bool:
         """
