@@ -1,10 +1,10 @@
 # src/ui/pages/home_page.py
-import json
-import os
-
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
+
+from src.utils.path_manager import PathManager
+from src.utils.software_info import load_software_info
 
 
 class HomePage(QWidget):
@@ -24,7 +24,7 @@ class HomePage(QWidget):
 
         # Logo
         logo_label = QLabel()
-        pixmap = QPixmap("resources/icons/USTB_logo_horizontal.png")
+        pixmap = QPixmap(PathManager.get_resources_path("icons/USTB_logo_horizontal.png"))
         if not pixmap.isNull():
             logo_label.setPixmap(
                 pixmap.scaled(600, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -85,15 +85,4 @@ class HomePage(QWidget):
     @staticmethod
     def _load_software_info() -> dict:
         """当未传入 software_info 时，从配置文件加载"""
-        from src.utils.path_manager import PathManager
-        info_path = PathManager.get_config_path("software.info")
-        if os.path.exists(info_path):
-            with open(info_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return {
-            "version": "1.0.0",
-            "author": "北京科技大学",
-            "description": "TMH-LPF-900 铁矿石全性能综合检测与控制系统",
-            "release_date": "2024-01-20",
-            "copyright": "© 2024 北京科技大学",
-        }
+        return load_software_info()

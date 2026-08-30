@@ -287,7 +287,6 @@ class ExperimentDialog(QDialog):
             }
 
             # 保存到配置文件
-            os.makedirs("configs", exist_ok=True)
             with open(self.exp_config, 'w', encoding='utf-8') as f:
                 json.dump(settings, f, ensure_ascii=False, indent=4)
 

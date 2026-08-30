@@ -1,10 +1,13 @@
 # src/ui/ui_components/title_bar.py
-import os
-from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, 
+from pathlib import Path
+
+from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout,
                                QLabel, QGraphicsOpacityEffect)
 from PySide6.QtCore import Qt, QTimer, QDateTime, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QPixmap
 from src.utils.logger import get_logger
+from src.utils.path_manager import PathManager
+from src.utils.software_info import DEFAULT_SOFTWARE_INFO
 
 
 class TitleBar(QWidget):
@@ -83,14 +86,15 @@ class TitleBar(QWidget):
         logo_label.setAlignment(Qt.AlignCenter)
         
         # 加载PNG图片
-        logo_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "resources", "icons", "ustb_logo.png")
-        if os.path.exists(logo_path):
+        logo_path = self.logo_path()
+        if Path(logo_path).exists():
             pixmap = QPixmap(logo_path)
             # 缩放图片到合适大小，使用高质量缩放
             scaled_pixmap = pixmap.scaled(50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             logo_label.setPixmap(scaled_pixmap)
         else:
             # 如果图片不存在，显示文字作为后备
+            self.logger.warning(f"标题栏Logo不存在: {logo_path}")
             logo_label.setText("TMH")
         
         logo_layout.addWidget(logo_label)
@@ -104,7 +108,7 @@ class TitleBar(QWidget):
         title_layout.setSpacing(3)
         
         # 主标题
-        self.main_title = QLabel(self.software_info.get('description', 'TMH-LPF-900 铁矿石全性能综合检测与控制系统'))
+        self.main_title = QLabel(self.software_info.get('description', DEFAULT_SOFTWARE_INFO['description']))
         self.main_title.setObjectName("mainTitle")
         title_layout.addWidget(self.main_title)
         
@@ -121,6 +125,10 @@ class TitleBar(QWidget):
         left_layout.addWidget(title_container)
         
         return left_widget
+
+    @staticmethod
+    def logo_path() -> str:
+        return PathManager.get_resources_path("icons/ustb_logo.png")
 
     def create_right_section(self):
         """创建右侧状态信息区域"""
