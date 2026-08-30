@@ -22,6 +22,7 @@ from src.models.experiment_state import (
 from src.services.experiment_modes import ExperimentType
 from src.services.enhanced_experiment_modes import EnhancedExperimentModeManager
 from src.services.experiment_type_manager import ExperimentTypeManager
+from src.services.standard_modes import STANDARD_MODES
 from src.services.database import ExperimentDatabase, ExperimentData
 from src.utils.path_manager import PathManager
 from src.utils.audit import audit, AuditCategory, AuditResult
@@ -287,9 +288,6 @@ class ExperimentController(QObject):
             bool: 设置是否成功
         """
         try:
-            # 导入ExperimentType（在函数开始就导入，避免作用域问题）
-            from src.services.experiment_modes import ExperimentType
-            
             # 获取类型信息
             type_info = self.experiment_type_manager.get_type_by_id(mode_id)
             if not type_info:
@@ -298,17 +296,11 @@ class ExperimentController(QObject):
             
             # 标准模式使用原有的设置方法
             if self.experiment_type_manager.is_standard_type(mode_id):
-                mode_mapping = {
-                    "GB_13241_2017": ExperimentType.REDUCIBILITY,
-                    "GB_13242_2017": ExperimentType.LOW_TEMP_DEGRADATION,
-                    "GB_13240_2018": ExperimentType.FREE_SWELLING
-                }
-                
-                if mode_id in mode_mapping:
-                    return self.set_experiment_mode(mode_mapping[mode_id])
-                else:
+                definition = STANDARD_MODES.get(mode_id)
+                if definition is None:
                     self.logger.error(f"标准模式ID映射失败: {mode_id}")
                     return False
+                return self.set_experiment_mode(definition.experiment_type)
             
             # 自定义模式
             elif self.experiment_type_manager.is_custom_type(mode_id):

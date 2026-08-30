@@ -8,6 +8,7 @@ import os
 
 from src.utils.path_manager import PathManager
 from src.services.experiment_type_manager import ExperimentTypeManager
+from src.services.standard_modes import STANDARD_MODES
 
 
 class ExperimentDialog(QDialog):
@@ -123,15 +124,8 @@ class ExperimentDialog(QDialog):
         except Exception as e:
             # 如果加载失败，使用默认选项
             QMessageBox.warning(self, "警告", f"加载实验类型失败：{str(e)}")
-            default_types = [
-                "GB/T 13240-2018 铁矿石自由膨胀指数的测定",
-                "GB/T 13241-2017 铁矿石还原性能的测定", 
-                "GB/T 13242-2017 铁矿石低温粉化指数的测定"
-            ]
-            # 与 default_types 一一对应的标准类型ID（注意 13240 为 2018 版）
-            default_type_ids = ["GB_13240_2018", "GB_13241_2017", "GB_13242_2017"]
-            for type_name, type_id in zip(default_types, default_type_ids):
-                self.exp_type.addItem(type_name, type_id)
+            for mode_id, definition in STANDARD_MODES.items():
+                self.exp_type.addItem(definition.name, mode_id)
 
     def reset_settings(self):
         """重置设置"""
@@ -164,27 +158,10 @@ class ExperimentDialog(QDialog):
             # 获取实验类型ID
             mode_id = self.exp_type.currentData()
             if not mode_id:
-                # 如果没有ID，使用文本匹配
-                exp_type = self.exp_type.currentText()
-                if "还原性能" in exp_type or "还原性" in exp_type:
-                    prefix = "RED"
-                elif "膨胀指数" in exp_type or "自由膨胀" in exp_type:
-                    prefix = "SWE"
-                elif "粉化指数" in exp_type or "低温粉化" in exp_type:
-                    prefix = "RDI"
-                else:
-                    prefix = "TST"
+                prefix = "TST"
             else:
-                # 根据模式ID确定前缀
-                if mode_id == "GB_13241_2017":
-                    prefix = "RED"
-                elif mode_id == "GB_13240_2018":
-                    prefix = "SWE"
-                elif mode_id == "GB_13242_2017":
-                    prefix = "RDI"
-                else:
-                    # 自定义模式，使用CUS前缀
-                    prefix = "CUS"
+                definition = STANDARD_MODES.get(mode_id)
+                prefix = definition.sample_prefix if definition else "CUS"
 
             # 获取当前系统日期
             current_date = QDateTime.currentDateTime()

@@ -12,12 +12,7 @@ import json
 import os
 from datetime import datetime
 
-
-class ExperimentType(Enum):
-    """实验类型枚举"""
-    REDUCIBILITY = "GB/T 13241-2017 铁矿石还原性测定方法"
-    LOW_TEMP_DEGRADATION = "GB/T 13242-2017 铁矿石低温粉化试验方法"
-    FREE_SWELLING = "GB/T 13240-2018 球团矿自由膨胀指数测定方法"
+from src.services.standard_modes import STANDARD_MODES, ExperimentType
 
 
 class ExperimentStage(Enum):
@@ -356,24 +351,13 @@ class ExperimentModeManager:
     def get_standard_modes(self) -> Dict[str, Dict[str, Any]]:
         """获取标准实验模式"""
         return {
-            "GB_13241_2017": {
-                "name": "GB/T 13241-2017 铁矿石还原性测定方法",
-                "description": "标准铁矿石还原性测定实验",
-                "category": "standard",
-                "enabled": True
-            },
-            "GB_13242_2017": {
-                "name": "GB/T 13242-2017 铁矿石低温粉化试验方法", 
-                "description": "低温条件下铁矿石粉化特性测试",
-                "category": "standard",
-                "enabled": True
-            },
-            "GB_13240_2018": {
-                "name": "GB/T 13240-2018 球团矿自由膨胀指数测定方法",
-                "description": "球团矿在还原气氛下的膨胀特性测试", 
+            mode_id: {
+                "name": definition.name,
+                "description": definition.description,
                 "category": "standard",
                 "enabled": True
             }
+            for mode_id, definition in STANDARD_MODES.items()
         }
     
     def get_custom_modes(self) -> Dict[str, Dict[str, Any]]:
@@ -385,13 +369,8 @@ class ExperimentModeManager:
         standard_modes = self.get_standard_modes()
         if mode_id in standard_modes:
             mode_data = standard_modes[mode_id].copy()
-            # 添加阶段信息
-            if mode_id == "GB_13241_2017":
-                mode_data['stages'] = self._convert_stages_to_dict(ExperimentType.REDUCIBILITY)
-            elif mode_id == "GB_13242_2017":
-                mode_data['stages'] = self._convert_stages_to_dict(ExperimentType.LOW_TEMP_DEGRADATION)
-            elif mode_id == "GB_13240_2018":
-                mode_data['stages'] = self._convert_stages_to_dict(ExperimentType.FREE_SWELLING)
+            definition = STANDARD_MODES[mode_id]
+            mode_data['stages'] = self._convert_stages_to_dict(definition.experiment_type)
             return mode_data
         return None
     
