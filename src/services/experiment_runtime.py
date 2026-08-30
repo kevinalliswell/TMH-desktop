@@ -8,6 +8,7 @@ class ExperimentRuntime(QObject):
 
     status_updated = Signal(str)
     system_message_updated = Signal(str)
+    safety_alert = Signal(str)
     experiment_started = Signal()
     experiment_stopped = Signal()
     experiment_time_updated = Signal(str)
@@ -55,6 +56,7 @@ class ExperimentRuntime(QObject):
             return
         self._controller.status_updated.connect(self.status_updated)
         self._controller.system_message_updated.connect(self.system_message_updated)
+        self._controller.safety_alert.connect(self.safety_alert)
         self._controller.experiment_started.connect(self.experiment_started)
         self._controller.experiment_stopped.connect(self.experiment_stopped)
         self._controller.experiment_time_updated.connect(self.experiment_time_updated)
@@ -70,6 +72,7 @@ class ExperimentRuntime(QObject):
         try:
             self._controller.status_updated.disconnect(self.status_updated)
             self._controller.system_message_updated.disconnect(self.system_message_updated)
+            self._controller.safety_alert.disconnect(self.safety_alert)
             self._controller.experiment_started.disconnect(self.experiment_started)
             self._controller.experiment_stopped.disconnect(self.experiment_stopped)
             self._controller.experiment_time_updated.disconnect(self.experiment_time_updated)

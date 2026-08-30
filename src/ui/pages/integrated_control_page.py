@@ -163,6 +163,10 @@ class IntegratedControlPage(QWidget):
             except (RuntimeError, TypeError):
                 pass
             try:
+                self.experiment_api.safety_alert.disconnect(self._on_safety_alert)
+            except (AttributeError, RuntimeError, TypeError):
+                pass
+            try:
                 self.experiment_api.experiment_started.disconnect(self._on_experiment_started)
             except (RuntimeError, TypeError):
                 pass
@@ -277,6 +281,7 @@ class IntegratedControlPage(QWidget):
             return
         self.experiment_api.status_updated.connect(self._on_experiment_status_updated)
         self.experiment_api.system_message_updated.connect(self._on_system_message_updated)
+        self.experiment_api.safety_alert.connect(self._on_safety_alert)
         self.experiment_api.experiment_started.connect(self._on_experiment_started)
         self.experiment_api.experiment_stopped.connect(self._on_experiment_stopped)
         self.experiment_api.experiment_time_updated.connect(self._on_experiment_time_updated)
@@ -352,6 +357,13 @@ class IntegratedControlPage(QWidget):
         self.logger.info(f"系统消息：{message}")
         self._current_system_message = message
         self.experiment_status.set_status(experiment_status=message)
+
+    def _on_safety_alert(self, message):
+        """显示需要人工处置的高危气体安全告警。"""
+        self.logger.critical(f"气体安全告警：{message}")
+        self._current_system_message = message
+        self.experiment_status.set_status(experiment_status=message)
+        QMessageBox.critical(self, "气体安全告警", message)
 
     def _on_experiment_started(self):
         """实验开始信号处理"""
