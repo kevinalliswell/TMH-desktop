@@ -91,11 +91,18 @@ class FreeExpansionCalculator:
         
         try:
             temperatures = [d['temperature'] for d in data]
+            gas_flows = [d['gas_flow'] for d in data]
             timestamps = [d['timestamp'] for d in data]
-            
-            # 检查温度范围
-            if max(temperatures) > 1200:
-                problems.append("温度超过最大限值1200℃")
+
+            # GB/T 13240 还原阶段应维持在 900℃。
+            temp_mean = np.mean(temperatures)
+            temp_std = np.std(temperatures)
+            if abs(temp_mean - 900) > 10 or temp_std > 5:
+                problems.append("温度控制不稳定，应维持在900±10℃")
+
+            # 还原气总流量为 15 L/min。
+            if not all(14.5 <= flow <= 15.5 for flow in gas_flows):
+                problems.append("气体流量超出范围，应维持在15±0.5L/min")
                 
             # 检查升温速率
             temp_diff = np.diff(temperatures)
@@ -107,11 +114,11 @@ class FreeExpansionCalculator:
                 
             # 检查实验时长
             duration = (timestamps[-1] - timestamps[0]).total_seconds() / 60
-            if duration < 180:  # 至少3小时
-                problems.append("实验时间不足3小时")
+            if duration < 60:  # 还原阶段至少1小时
+                problems.append("实验时间不足1小时")
                 
         except Exception as e:
             self.logger.error(f"验证实验条件失败: {str(e)}")
             problems.append(f"数据验证过程出错: {str(e)}")
             
-        return problems 
+        return problems
