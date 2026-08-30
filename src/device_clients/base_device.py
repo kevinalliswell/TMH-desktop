@@ -65,6 +65,19 @@ class BaseDevice(threading.Thread, ABC):
         # 加载性能配置（子类可通过 override 扩展）
         self._init_performance_config()
 
+    @property
+    def serial_port_available(self) -> bool:
+        """Live compatibility view of the device connection health.
+
+        Older call sites use this name as a write-command gate. Keeping it as
+        a property prevents that gate from freezing at the startup probe.
+        """
+        return bool(self.connection_healthy)
+
+    @serial_port_available.setter
+    def serial_port_available(self, available: bool) -> None:
+        self.connection_healthy = bool(available)
+
     def _init_performance_config(self):
         """从配置文件加载性能参数
 
@@ -100,7 +113,6 @@ class BaseDevice(threading.Thread, ABC):
                     self.serial_port = None
                 else:
                     self.connection_healthy = True
-                    self.last_successful_read = time.time()
                     return True  # 串口已经正常打开
             except Exception:
                 self.serial_port = None
@@ -120,7 +132,6 @@ class BaseDevice(threading.Thread, ABC):
                 )
                 self.logger.info(f"串口 {self.port_config.get('port')} 已成功打开")
                 self.connection_healthy = True
-                self.last_successful_read = time.time()
                 self.reconnect_attempt = 0  # 重置重连计数
                 return True
             except serial.SerialException as e:
@@ -173,6 +184,7 @@ class BaseDevice(threading.Thread, ABC):
                 self.logger.error(f'关闭串口时出错: {e}')
             finally:
                 self.serial_port = None
+        self.connection_healthy = False
 
     @contextmanager
     def serial_port_context(self):
