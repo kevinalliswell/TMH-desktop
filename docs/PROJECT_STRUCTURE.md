@@ -27,7 +27,6 @@ TMH1.0.250907/
 │   │   ├── data_handler.py       # 数据处理器
 │   │   ├── device_health_monitor.py  # 设备健康监控
 │   │   ├── device_manager.py     # 设备管理器
-│   │   ├── mfcCMQProtocol.py     # MFC通信协议
 │   │   ├── multi_mfc_client.py   # 多路MFC客户端
 │   │   └── temp_client.py        # 温度设备客户端
 │   ├── ui/                       # 用户界面模块
@@ -69,6 +68,9 @@ TMH1.0.250907/
 │   │   └── security_validator.py        # 安全验证器
 │   └── web_server/               # Web服务器模块
 │       └── templates/             # Web模板
+├── packages/                     # 本地通信协议包
+│   └── tmh_comm/src/tmh_comm/protocols/
+│       └── mfc_cpl.py            # MFC Modbus-CPL协议
 ├── configs/                      # 配置文件目录
 │   ├── comm_config.json          # 通信配置
 │   ├── exp_settings.config       # 实验设置配置
@@ -123,7 +125,7 @@ TMH1.0.250907/
 - **balance_client.py**: 天平设备客户端
 - **temp_client.py**: 温度设备客户端
 - **multi_mfc_client.py**: 多路质量流量控制器客户端
-- **mfcCMQProtocol.py**: MFC通信协议实现
+- **packages/tmh_comm/src/tmh_comm/protocols/mfc_cpl.py**: MFC Modbus-CPL协议实现
 
 ### 4. 用户界面 (src/ui/)
 - **main_window.py**: 主窗口实现
