@@ -108,10 +108,13 @@ class AppRuntime(QObject):
         self.comm_status_timer.start(3000)
         self._started = True
 
-    def stop(self):
-        """停止后端服务。"""
+    def stop(self) -> bool:
+        """停止后端服务；活动实验必须先完成正常安全停机。"""
         if not self._started:
-            return
+            return True
+
+        if not self._stop_active_experiment():
+            return False
 
         # 停止并断开通信状态定时器
         if self.comm_status_timer:
@@ -155,15 +158,47 @@ class AppRuntime(QObject):
         self._device_backend_sources = {}
         self._device_backend_details = {}
         self._started = False
+        return True
 
-    def restart(self):
+    def restart(self) -> bool:
         """重启后端服务（用于应用新的通信配置）。"""
-        self.stop()
+        if not self.stop():
+            return False
         self.start()
+        return self._started
 
-    def apply_comm_settings(self):
+    def apply_comm_settings(self) -> bool:
         """应用通信配置变更。"""
-        self.restart()
+        return self.restart()
+
+    def _stop_active_experiment(self) -> bool:
+        """Run the controller stop path before tearing down runtime services."""
+        experiment_runtime = self.experiment_runtime
+        if experiment_runtime is None:
+            return True
+
+        get_controller = getattr(experiment_runtime, "get_controller", None)
+        if not callable(get_controller):
+            return True
+
+        controller = get_controller()
+        if controller is None or not controller.is_experiment_running():
+            return True
+
+        self.logger.warning("运行时关闭前检测到活动实验，正在执行安全停机")
+        try:
+            stopped = bool(experiment_runtime.stop_experiment())
+        except Exception as exc:
+            self.logger.critical(
+                f"活动实验安全停机异常，已取消运行时关闭: {exc}",
+                exc_info=True,
+            )
+            return False
+
+        if not stopped:
+            self.logger.critical("活动实验安全停机失败，已取消运行时关闭")
+            return False
+        return True
 
     @property
     def services(self) -> RuntimeServices:
