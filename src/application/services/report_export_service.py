@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+from html import escape
+import json
 from pathlib import Path
 
 from src.application.dto import ExperimentDetailDTO
@@ -32,14 +34,31 @@ class ReportExportService:
                         "                <td>{{ item.standard_value }}</td>\n                <td>{{ item.actual_value }}</td>\n"
                         "            </tr>\n            {% endfor %}")
 
-    def __init__(self, history_query_service=None, exports_dir: str | None = None, resources_dir: str | None = None):
+    def __init__(
+        self,
+        history_query_service=None,
+        exports_dir: str | None = None,
+        reports_dir: str | None = None,
+        resources_dir: str | None = None,
+    ):
         self.logger = get_logger(__name__)
         self.history_query_service = history_query_service or HistoryQueryService()
         self.exports_dir = Path(exports_dir or PathManager.get_exports_path())
+        if reports_dir:
+            self.reports_dir = Path(reports_dir)
+        elif exports_dir:
+            # Preserve the injected export directory contract used by tests and callers.
+            self.reports_dir = self.exports_dir
+        else:
+            self.reports_dir = Path.home() / "Downloads" / "TMH-Exp-Datas"
         self.templates_dir = Path(resources_dir or PathManager.get_resources_path()) / "templates"
 
     def default_export_dir(self) -> str:
         return str(self.exports_dir)
+
+    def default_report_dir(self) -> str:
+        self.reports_dir.mkdir(parents=True, exist_ok=True)
+        return str(self.reports_dir)
 
     def export_experiment_data(self, experiment_id: str, filepath: str, export_format: str | None = None) -> str:
         detail = self._require_experiment_detail(experiment_id)
@@ -61,7 +80,7 @@ class ReportExportService:
               experiment_id=experiment_id, format=fmt, path=str(path))
         return str(path)
 
-    def generate_html_report(self, experiment_id: str) -> str:
+    def generate_html_report(self, experiment_id: str, output_dir: str | Path | None = None) -> str:
         detail = self._require_experiment_detail(experiment_id)
         category = self.detect_experiment_category(detail.experiment_type)
 
@@ -75,19 +94,82 @@ class ReportExportService:
             content = self._build_expansion_report(detail)
             prefix = "膨胀报告"
         else:
-            raise UnsupportedReportTypeError(
-                f"实验 '{detail.experiment_name}' (类型: {detail.experiment_type or '未知类型'}) 暂不支持报告生成"
-            )
+            content = self._build_generic_report(detail)
+            prefix = "实验报告"
 
         saved_path = self._save_html_report(
             content,
             prefix=prefix,
             experiment_name=detail.experiment_name,
             experiment_id=detail.experiment_id,
+            output_dir=output_dir,
         )
         audit(AuditCategory.EXPORT, "generate_report",
               experiment_id=detail.experiment_id, report_category=category, path=saved_path)
         return saved_path
+
+    def _build_generic_report(self, detail: ExperimentDetailDTO) -> str:
+        """Build a printable report for operator-defined experiment modes."""
+        info_rows = [
+            ["实验名称", detail.experiment_name],
+            ["样品名称", detail.sample_name],
+            ["样品重量(g)", detail.sample_weight],
+            ["开始时间", detail.start_time],
+            ["结束时间", detail.end_time or ""],
+            ["操作员", detail.operator],
+            ["实验类型", detail.experiment_type],
+            ["描述", detail.description],
+        ]
+        data_headers = [
+            "时间", "温度(℃)", "重量(g)", "失重(%)",
+            "CO(L/min)", "CO₂(L/min)", "N₂(L/min)", "H₂(L/min)",
+        ]
+        info_html = self._html_rows(info_rows)
+        data_html = self._html_rows(self._iter_series_rows(detail))
+        header_html = "".join(f"<th>{escape(header)}</th>" for header in data_headers)
+        analysis_html = ""
+        if detail.analysis_results:
+            analysis_json = escape(
+                json.dumps(detail.analysis_results, ensure_ascii=False, indent=2, default=str)
+            )
+            analysis_html = f"<h2>分析结果</h2><pre>{analysis_json}</pre>"
+
+        return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>{escape(detail.experiment_name)} - 实验报告</title>
+  <style>
+    body {{ font-family: Arial, "Microsoft YaHei", sans-serif; margin: 32px; color: #222; }}
+    h1 {{ text-align: center; }}
+    table {{ width: 100%; border-collapse: collapse; margin: 16px 0 28px; }}
+    th, td {{ border: 1px solid #777; padding: 7px 9px; text-align: center; }}
+    th {{ background: #e8eef7; }}
+    .info td:first-child {{ width: 26%; font-weight: bold; background: #f5f5f5; }}
+    pre {{ border: 1px solid #bbb; padding: 12px; white-space: pre-wrap; }}
+    @media print {{ body {{ margin: 12mm; }} }}
+  </style>
+</head>
+<body>
+  <h1>实验报告</h1>
+  <p>本报告为非标准/操作员自定义实验的通用记录，不代表国家标准符合性结论。</p>
+  <h2>实验信息</h2>
+  <table class="info"><tbody>{info_html}</tbody></table>
+  <h2>实验数据</h2>
+  <table><thead><tr>{header_html}</tr></thead><tbody>{data_html}</tbody></table>
+  {analysis_html}
+</body>
+</html>
+"""
+
+    @staticmethod
+    def _html_rows(rows) -> str:
+        return "".join(
+            "<tr>" + "".join(
+                f"<td>{escape('' if value is None else str(value))}</td>" for value in row
+            ) + "</tr>"
+            for row in rows
+        )
 
     @staticmethod
     def detect_experiment_category(experiment_type: str) -> str:
@@ -353,11 +435,19 @@ class ReportExportService:
         content = content.replace("{{ lab_info.postal_code }}", "100083")
         return content
 
-    def _save_html_report(self, content: str, prefix: str, experiment_name: str, experiment_id: str) -> str:
-        self.exports_dir.mkdir(parents=True, exist_ok=True)
+    def _save_html_report(
+        self,
+        content: str,
+        prefix: str,
+        experiment_name: str,
+        experiment_id: str,
+        output_dir: str | Path | None = None,
+    ) -> str:
+        report_dir = Path(output_dir) if output_dir else self.reports_dir
+        report_dir.mkdir(parents=True, exist_ok=True)
         safe_name = "".join(char if char.isalnum() else "_" for char in experiment_name)
         filename = f"{prefix}_{safe_name}_{experiment_id[:8]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.html"
-        path = self.exports_dir / filename
+        path = report_dir / filename
         path.write_text(content, encoding="utf-8")
         self.logger.info(f"成功生成报告: {path}")
         return str(path)
