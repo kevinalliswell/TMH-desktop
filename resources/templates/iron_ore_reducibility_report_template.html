@@ -231,20 +231,6 @@
                 <td>{{ item.red_rate }}</td>
             </tr>
             {% endfor %}
-            <tr>
-                <td>平均值<br>Average</td>
-                <td>{{ (test_results[0].mass_before + test_results[1].mass_before) / 2 }}</td>
-                <td>{{ (test_results[0].mass_after + test_results[1].mass_after) / 2 }}</td>
-                <td>{{ (test_results[0].oxygen_loss_30min + test_results[1].oxygen_loss_30min) / 2 }}</td>
-                <td>{{ (test_results[0].oxygen_loss_60min + test_results[1].oxygen_loss_60min) / 2 }}</td>
-                <td>{{ (test_results[0].oxygen_loss_90min + test_results[1].oxygen_loss_90min) / 2 }}</td>
-                <td>{{ (test_results[0].oxygen_loss_final + test_results[1].oxygen_loss_final) / 2 }}</td>
-                <td>{{ (test_results[0].red_degree_30min + test_results[1].red_degree_30min) / 2 }}</td>
-                <td>{{ (test_results[0].red_degree_60min + test_results[1].red_degree_60min) / 2 }}</td>
-                <td>{{ (test_results[0].red_degree_90min + test_results[1].red_degree_90min) / 2 }}</td>
-                <td>{{ (test_results[0].red_degree_final + test_results[1].red_degree_final) / 2 }}</td>
-                <td>{{ (test_results[0].red_rate + test_results[1].red_rate) / 2 }}</td>
-            </tr>
         </table>
 
         <div class="section-title">5. 还原度指标 Reducibility Index</div>

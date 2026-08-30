@@ -1,4 +1,5 @@
 ﻿# src/services/gb13241_calculator.py
+import math
 from typing import List, Dict, Optional
 import numpy as np
 import logging
@@ -71,8 +72,92 @@ class ReductionCalculator:
         except Exception as e:
             self.logger.error(f"计算还原速率指数失败: {str(e)}")
             return None
+
+    @staticmethod
+    def _interpolate_at_time(
+        series: List[tuple[float, float]],
+        target_minutes: float,
+    ) -> Optional[float]:
+        if not series or target_minutes < series[0][0] or target_minutes > series[-1][0]:
+            return None
+        for index, (minutes, value) in enumerate(series):
+            if minutes == target_minutes:
+                return value
+            if minutes > target_minutes and index > 0:
+                previous_minutes, previous_value = series[index - 1]
+                span = minutes - previous_minutes
+                if span <= 0:
+                    continue
+                ratio = (target_minutes - previous_minutes) / span
+                return previous_value + (value - previous_value) * ratio
+        return None
+
+    @staticmethod
+    def _first_crossing_time(
+        series: List[tuple[float, float]],
+        target_value: float,
+    ) -> Optional[float]:
+        if not series:
+            return None
+        if series[0][1] >= target_value:
+            return series[0][0]
+        for index in range(1, len(series)):
+            previous_minutes, previous_value = series[index - 1]
+            minutes, value = series[index]
+            if previous_value < target_value <= value:
+                span = value - previous_value
+                if span <= 0:
+                    continue
+                ratio = (target_value - previous_value) / span
+                return previous_minutes + (minutes - previous_minutes) * ratio
+        return None
+
+    @staticmethod
+    def _prepare_reduction_series(data: List[Dict]) -> List[tuple[float, float]]:
+        has_co_measurements = any("co_flow" in point for point in data)
+        start_index = 0
+        if has_co_measurements:
+            start_index = next(
+                (
+                    index
+                    for index, point in enumerate(data)
+                    if isinstance(point.get("co_flow"), (int, float))
+                    and math.isfinite(float(point["co_flow"]))
+                    and float(point["co_flow"]) > 0.0
+                ),
+                -1,
+            )
+            if start_index < 0:
+                return []
+
+        valid_points = []
+        for point in data[start_index:]:
+            timestamp = point.get("timestamp")
+            if isinstance(timestamp, str):
+                try:
+                    timestamp = datetime.fromisoformat(timestamp)
+                except ValueError:
+                    continue
+            if not isinstance(timestamp, datetime):
+                continue
+            try:
+                weight = float(point.get("weight"))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(weight):
+                continue
+            valid_points.append((timestamp, weight))
+
+        if not valid_points:
+            return []
+        valid_points.sort(key=lambda item: item[0])
+        started_at = valid_points[0][0]
+        return [
+            ((timestamp - started_at).total_seconds() / 60.0, weight)
+            for timestamp, weight in valid_points
+        ]
             
-    def analyze_experiment_data(self, data: List[Dict], oxygen_content: float) -> Dict:
+    def analyze_experiment_data(self, data: List[Dict], oxygen_content: Optional[float]) -> Dict:
         """
         分析实验数据，生成结果报告
         
@@ -84,40 +169,73 @@ class ReductionCalculator:
             Dict: 分析结果字典
         """
         try:
-            # 提取重量和时间数据
-            weights = [d['weight'] for d in data]
-            timestamps = [d['timestamp'] for d in data]
-            
-            # 计算时间序列（分钟）
-            start_time = timestamps[0]
-            times = [(t - start_time).total_seconds() / 60 for t in timestamps]
-            
-            # 计算还原度序列
-            initial_weight = weights[0]
-            reduction_degrees = [
-                self.calculate_reduction_degree(initial_weight, w, oxygen_content)
-                for w in weights
-            ]
-            
-            # 计算还原速率指数
-            reduction_index = self.calculate_reduction_index(reduction_degrees, times)
-            
-            # 计算最终还原度
-            final_reduction_degree = reduction_degrees[-1]
-            
+            weight_series = self._prepare_reduction_series(data)
+            if not weight_series:
+                return {}
+
+            initial_weight = weight_series[0][1]
+            final_weight = weight_series[-1][1]
+            oxygen_content_value = None
+            if oxygen_content is not None:
+                try:
+                    candidate = float(oxygen_content)
+                except (TypeError, ValueError):
+                    candidate = 0.0
+                if math.isfinite(candidate) and 0.0 < candidate <= 100.0:
+                    oxygen_content_value = candidate
+
+            degree_series: List[tuple[float, float]] = []
+            if oxygen_content_value is not None:
+                for minutes, weight in weight_series:
+                    degree = self.calculate_reduction_degree(
+                        initial_weight,
+                        weight,
+                        oxygen_content_value,
+                    )
+                    if degree is not None:
+                        degree_series.append((minutes, degree))
+
+            weights_at = {
+                minutes: self._interpolate_at_time(weight_series, minutes)
+                for minutes in (30.0, 60.0, 90.0)
+            }
+            degrees_at = {
+                minutes: self._interpolate_at_time(degree_series, minutes)
+                for minutes in (30.0, 60.0, 90.0)
+            }
+            reduction_rate = None
+            if degrees_at[30.0] is not None and degrees_at[60.0] is not None:
+                reduction_rate = round((degrees_at[60.0] - degrees_at[30.0]) / 30.0, 3)
+
             return {
-                'initial_weight': round(initial_weight, 3),
-                'final_weight': round(weights[-1], 3),
-                'total_weight_loss': round(initial_weight - weights[-1], 3),
-                'final_reduction_degree': final_reduction_degree,
-                'reduction_index': reduction_index,
-                'experiment_duration': times[-1],
-                'data_points': len(data)
+                "initial_weight": round(initial_weight, 3),
+                "final_weight": round(final_weight, 3),
+                "total_weight_loss": round(initial_weight - final_weight, 3),
+                "oxygen_content": oxygen_content_value,
+                "oxygen_loss_at_30min": self._weight_loss(initial_weight, weights_at[30.0]),
+                "oxygen_loss_at_60min": self._weight_loss(initial_weight, weights_at[60.0]),
+                "oxygen_loss_at_90min": self._weight_loss(initial_weight, weights_at[90.0]),
+                "reduction_degree_at_30min_percent": degrees_at[30.0],
+                "reduction_degree_at_60min_percent": degrees_at[60.0],
+                "reduction_degree_at_90min_percent": degrees_at[90.0],
+                "final_reduction_degree": degree_series[-1][1] if degree_series else None,
+                "reduction_index": reduction_rate,
+                "time_to_40_percent_reduction_min": self._first_crossing_time(degree_series, 40.0),
+                "time_to_50_percent_reduction_min": self._first_crossing_time(degree_series, 50.0),
+                "time_to_70_percent_reduction_min": self._first_crossing_time(degree_series, 70.0),
+                "experiment_duration": weight_series[-1][0],
+                "data_points": len(weight_series),
             }
             
         except Exception as e:
             self.logger.error(f"分析实验数据失败: {str(e)}")
             return {}
+
+    @staticmethod
+    def _weight_loss(initial_weight: float, current_weight: Optional[float]) -> Optional[float]:
+        if current_weight is None:
+            return None
+        return round(initial_weight - current_weight, 3)
             
     def validate_experiment_conditions(self, data: List[Dict]) -> List[str]:
         """
@@ -155,4 +273,4 @@ class ReductionCalculator:
             self.logger.error(f"验证实验条件失败: {str(e)}")
             problems.append(f"数据验证过程出错: {str(e)}")
             
-        return problems 
+        return problems

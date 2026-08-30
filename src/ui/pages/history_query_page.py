@@ -619,8 +619,7 @@ class HistoryQuery(QWidget):
         timestamps_str = self.current_experiment.get("timestamps", [])
         weights = self.current_experiment.get("weights", [])
         temperatures = self.current_experiment.get("temperatures", []) # 可选，但最好包含
-        # 其他流量数据也可以按需添加
-        # gas_flows = self.current_experiment.get("gas_flows", {})
+        gas_flows = self.current_experiment.get("gas_flows", {})
 
         if not timestamps_str or not weights or len(timestamps_str) != len(weights):
             QMessageBox.critical(self, "数据错误", f"实验 '{experiment_name}' 的时间戳或重量数据缺失或不匹配，无法分析。")
@@ -636,11 +635,9 @@ class HistoryQuery(QWidget):
                 }
                 if i < len(temperatures):
                     point['temperature'] = float(temperatures[i])
-                # 可在此处添加气体流量等其他需要的数据到 point 字典中
-                # if gas_flows:
-                #     for gas_name, flow_list in gas_flows.items():
-                #         if i < len(flow_list):
-                #             point[f'{gas_name}_flow'] = float(flow_list[i])
+                co_flows = gas_flows.get("CO", [])
+                if i < len(co_flows):
+                    point["co_flow"] = float(co_flows[i])
                 parsed_data_points.append(point)
             except (ValueError, TypeError) as e:
                 self.logger.error(f"转换数据点时出错 for experiment {experiment_id}, index {i}: {e}. Data: timestamp='{timestamps_str[i]}', weight='{weights[i]}'")

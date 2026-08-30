@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime
+import math
 from pathlib import Path
 
 from src.application.dto import ExperimentDetailDTO
 from src.application.services.history_query_service import HistoryQueryService
+from src.services.gb13241_calculator import ReductionCalculator
 from src.utils.logger import get_logger
 from src.utils.path_manager import PathManager
 from src.utils.audit import audit, AuditCategory, AuditResult
@@ -266,26 +268,41 @@ class ReportExportService:
         report = report.replace(self._EQUIPMENT_LOOP, self._build_equipment_html(self._get_val(analysis, "equipment", default_equip)))
 
         cc = self._get_val(analysis, "chemical_composition", {})
-        for key, default in [("TFe", "65.2"), ("FeO", "0.5"), ("SiO2", "4.8"), ("Al2O3", "1.2"), ("CaO", "0.8"), ("MgO", "0.3"), ("LOI", "2.1")]:
-            report = report.replace(f"{{{{ chemical_composition.{key} }}}}", str(self._get_val(cc, key, default)))
+        for key in ["TFe", "FeO", "SiO2", "Al2O3", "CaO", "MgO", "LOI"]:
+            report = report.replace(
+                f"{{{{ chemical_composition.{key} }}}}",
+                str(self._get_val(cc, key, "未测得")),
+            )
 
         default_cond = [
-            {"parameter": "还原温度", "standard_value": "900±10℃", "actual_value": "900℃"},
-            {"parameter": "还原气体", "standard_value": "CO:30%, CO₂:20%, N₂:50%", "actual_value": "CO:30%, CO₂:20%, N₂:50%"},
-            {"parameter": "气体流量", "standard_value": "15±0.5L/min", "actual_value": "15.0L/min"},
-            {"parameter": "试样质量", "standard_value": "500±1g", "actual_value": f"{detail.sample_weight}g"},
+            {"parameter": "还原温度", "standard_value": "900±10℃", "actual_value": "未测得"},
+            {"parameter": "还原气体", "standard_value": "CO:30%, CO₂:20%, N₂:50%", "actual_value": "未测得"},
+            {"parameter": "气体流量", "standard_value": "15±0.5L/min", "actual_value": "未测得"},
+            {
+                "parameter": "试样质量",
+                "standard_value": "500±1g",
+                "actual_value": f"{detail.sample_weight}g" if detail.sample_weight > 0 else "未测得",
+            },
         ]
         report = report.replace(self._CONDITIONS_LOOP, self._build_conditions_html(self._get_val(analysis, "test_conditions", default_cond)))
 
-        mass_before = float(self._get_val(analysis, "initial_weight", detail.sample_weight))
-        mass_after = float(self._get_val(analysis, "final_weight", mass_before * 0.95))
-        final_red = float(self._get_val(analysis, "final_reduction_degree", 1.67))
-        red_idx = float(self._get_val(analysis, "reduction_index", 0.01))
+        metrics = self._calculate_reducibility_metrics(detail)
+        mass_before = self._format_optional_number(metrics["mass_before"], decimals=1)
+        mass_after = self._format_optional_number(metrics["mass_after"], decimals=1)
+        oxygen_loss_30 = self._format_optional_number(metrics["oxygen_loss_30"])
+        oxygen_loss_60 = self._format_optional_number(metrics["oxygen_loss_60"])
+        oxygen_loss_90 = self._format_optional_number(metrics["oxygen_loss_90"])
+        oxygen_loss_final = self._format_optional_number(metrics["oxygen_loss_final"])
+        reduction_degree_30 = self._format_optional_number(metrics["reduction_degree_30"])
+        reduction_degree_60 = self._format_optional_number(metrics["reduction_degree_60"])
+        reduction_degree_90 = self._format_optional_number(metrics["reduction_degree_90"])
+        reduction_degree_final = self._format_optional_number(metrics["reduction_degree_final"])
+        reduction_rate = self._format_optional_number(metrics["reduction_rate"], decimals=3)
         results_html = (
-            f"<tr><td>1</td><td>{mass_before:.1f}</td><td>{mass_after:.1f}</td>"
-            f"<td>{final_red*0.3:.2f}</td><td>{final_red*0.6:.2f}</td><td>{final_red*0.9:.2f}</td><td>{final_red:.2f}</td>"
-            f"<td>{final_red*0.3:.2f}</td><td>{final_red*0.6:.2f}</td><td>{final_red*0.9:.2f}</td><td>{final_red:.2f}</td>"
-            f"<td>{red_idx:.3f}</td></tr>\n"
+            f"<tr><td>1</td><td>{mass_before}</td><td>{mass_after}</td>"
+            f"<td>{oxygen_loss_30}</td><td>{oxygen_loss_60}</td><td>{oxygen_loss_90}</td><td>{oxygen_loss_final}</td>"
+            f"<td>{reduction_degree_30}</td><td>{reduction_degree_60}</td><td>{reduction_degree_90}</td><td>{reduction_degree_final}</td>"
+            f"<td>{reduction_rate}</td></tr>\n"
         )
         report = report.replace(
             "{% for item in test_results %}\n            <tr>\n                <td>{{ loop.index }}</td>\n"
@@ -298,17 +315,93 @@ class ReportExportService:
             "            </tr>\n            {% endfor %}",
             results_html,
         )
-        report = report.replace("{{ reducibility_indices.RI }}", f"{final_red:.2f}")
-        report = report.replace("{{ reducibility_indices.dRdt }}", f"{red_idx:.3f}")
-        report = report.replace("{{ reducibility_indices.R60 }}", f"{final_red*0.6:.2f}")
-        report = report.replace("{{ reducibility_indices.t40 }}", "45")
-        report = report.replace("{{ reducibility_indices.t50 }}", "60")
-        report = report.replace("{{ reducibility_indices.t70 }}", "90")
+        report = report.replace("{{ reducibility_indices.RI }}", reduction_degree_60)
+        report = report.replace("{{ reducibility_indices.dRdt }}", reduction_rate)
+        report = report.replace("{{ reducibility_indices.R60 }}", reduction_degree_60)
+        report = report.replace(
+            "{{ reducibility_indices.t40 }}",
+            self._format_optional_number(metrics["t40"]),
+        )
+        report = report.replace(
+            "{{ reducibility_indices.t50 }}",
+            self._format_optional_number(metrics["t50"]),
+        )
+        report = report.replace(
+            "{{ reducibility_indices.t70 }}",
+            self._format_optional_number(metrics["t70"]),
+        )
+        final_summary = (
+            "最终还原度未测得"
+            if metrics["reduction_degree_final"] is None
+            else f"最终还原度为{reduction_degree_final}%"
+        )
+        rate_summary = (
+            "还原速率未测得"
+            if metrics["reduction_rate"] is None
+            else f"还原速率为{reduction_rate}%/min"
+        )
         report = report.replace(
             "{{ conclusion }}",
-            f"根据GB/T 13241-2017标准，该铁矿石样品的还原性指数为{final_red:.2f}%，还原速率为{red_idx:.3f}%/min。",
+            f"根据GB/T 13241-2017标准，该铁矿石样品的{final_summary}，{rate_summary}。",
         )
         return self._fill_report_footer(report, detail, self._test_date(detail))
+
+    def _calculate_reducibility_metrics(self, detail: ExperimentDetailDTO) -> dict[str, float | None]:
+        analysis = detail.analysis_results if isinstance(detail.analysis_results, dict) else {}
+        oxygen_content = self._percentage_or_none(
+            analysis.get("oxygen_content", analysis.get("oxygen_content_percentage"))
+        )
+        co_flows = detail.gas_flows.get("CO", []) if isinstance(detail.gas_flows, dict) else []
+        data_points = []
+        for index in range(min(len(detail.timestamps), len(detail.weights))):
+            point = {
+                "timestamp": detail.timestamps[index],
+                "weight": detail.weights[index],
+            }
+            if index < len(co_flows):
+                point["co_flow"] = co_flows[index]
+            data_points.append(point)
+
+        calculated = ReductionCalculator().analyze_experiment_data(
+            data_points,
+            oxygen_content=oxygen_content,
+        )
+        metrics = {
+            "mass_before": self._number_or_none(calculated.get("initial_weight")),
+            "mass_after": self._number_or_none(calculated.get("final_weight")),
+            "oxygen_loss_30": self._number_or_none(calculated.get("oxygen_loss_at_30min")),
+            "oxygen_loss_60": self._number_or_none(calculated.get("oxygen_loss_at_60min")),
+            "oxygen_loss_90": self._number_or_none(calculated.get("oxygen_loss_at_90min")),
+            "oxygen_loss_final": self._number_or_none(calculated.get("total_weight_loss")),
+            "reduction_degree_30": self._number_or_none(calculated.get("reduction_degree_at_30min_percent")),
+            "reduction_degree_60": self._number_or_none(calculated.get("reduction_degree_at_60min_percent")),
+            "reduction_degree_90": self._number_or_none(calculated.get("reduction_degree_at_90min_percent")),
+            "reduction_degree_final": self._number_or_none(calculated.get("final_reduction_degree")),
+            "reduction_rate": self._number_or_none(calculated.get("reduction_index")),
+            "t40": self._number_or_none(calculated.get("time_to_40_percent_reduction_min")),
+            "t50": self._number_or_none(calculated.get("time_to_50_percent_reduction_min")),
+            "t70": self._number_or_none(calculated.get("time_to_70_percent_reduction_min")),
+        }
+        analysis_fallbacks = {
+            "mass_before": "initial_weight",
+            "mass_after": "final_weight",
+            "oxygen_loss_30": "oxygen_loss_at_30min",
+            "oxygen_loss_60": "oxygen_loss_at_60min",
+            "oxygen_loss_90": "oxygen_loss_at_90min",
+            "oxygen_loss_final": "total_weight_loss",
+            "reduction_degree_30": "reduction_degree_at_30min_percent",
+            "reduction_degree_60": "reduction_degree_at_60min_percent",
+            "reduction_degree_90": "reduction_degree_at_90min_percent",
+            "reduction_degree_final": "final_reduction_degree",
+            "reduction_rate": "reduction_index",
+            "t40": "time_to_40_percent_reduction_min",
+            "t50": "time_to_50_percent_reduction_min",
+            "t70": "time_to_70_percent_reduction_min",
+        }
+        for metric, analysis_key in analysis_fallbacks.items():
+            if metrics[metric] is None:
+                metrics[metric] = self._number_or_none(analysis.get(analysis_key))
+        return metrics
 
     def _build_expansion_report(self, detail: ExperimentDetailDTO) -> str:
         report = self._load_template("pellet_free_swelling_index_report_template.html")
@@ -445,8 +538,16 @@ class ReportExportService:
         return percentage if 0.0 <= percentage <= 100.0 else None
 
     @staticmethod
-    def _format_optional_number(value: float | None) -> str:
-        return "未测得" if value is None else f"{value:.2f}"
+    def _number_or_none(value) -> float | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) else None
+
+    @staticmethod
+    def _format_optional_number(value: float | None, *, decimals: int = 2) -> str:
+        return "未测得" if value is None else f"{value:.{decimals}f}"
 
     @staticmethod
     def _get_value(items: list[float], index: int, default: float = 0.0) -> float:
