@@ -74,10 +74,6 @@ def test_cooling_stages_have_positive_tolerance_expected():
         assert cooling and all(s.temp_tolerance > 0 for s in cooling), etype.name
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#57 item 3: to_dict writes stage.value ('升温') but the parser maps only enum names, degrading every stage to IDLE",
-)
 def test_custom_stage_serialization_round_trip_expected():
     stage = StageSettings(
         stage=ExperimentStage.HEATING,

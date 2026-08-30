@@ -35,6 +35,7 @@ class IntegratedControlPage(QWidget):
         experiment_api=None,
         device_hub=None,
         gas_safety_limits=None,
+        experiment_type_manager=None,
     ):
         super().__init__(parent)
         self.device_manager = device_manager
@@ -55,7 +56,10 @@ class IntegratedControlPage(QWidget):
         self.experiment_file_manager = ExperimentFile()
         
         # 实验类型管理器
-        self.experiment_type_manager = ExperimentTypeManager()
+        self.experiment_type_manager = (
+            experiment_type_manager
+            or self.experiment_api.get_experiment_type_manager()
+        )
         self.workflow_service = ExperimentWorkflowService(
             device_manager=self.device_hub,
             experiment_api=self.experiment_api,
@@ -147,7 +151,7 @@ class IntegratedControlPage(QWidget):
             self._control_panel_signals_connected = True
 
     def rebind_runtime(self, device_manager, data_handler, experiment_api, device_hub=None,
-                       gas_safety_limits=None) -> None:
+                       gas_safety_limits=None, experiment_type_manager=None) -> None:
         """Refresh runtime-backed dependencies after AppRuntime restart."""
         if (
             self.experiment_api
@@ -190,6 +194,9 @@ class IntegratedControlPage(QWidget):
         self.device_hub = device_hub or device_manager
         self.data_handler = data_handler
         self.experiment_api = experiment_api
+        if experiment_type_manager is not None:
+            self.experiment_type_manager = experiment_type_manager
+            self.workflow_service.experiment_type_manager = experiment_type_manager
         self.workflow_service.device_manager = self.device_hub
         self.workflow_service.experiment_api = self.experiment_api
         self.presenter.experiment_api = self.experiment_api
@@ -238,7 +245,10 @@ class IntegratedControlPage(QWidget):
 
     def _get_experiment_parameters(self):
         """获取实验参数"""
-        dialog = ExperimentDialog(self)
+        dialog = ExperimentDialog(
+            self,
+            experiment_type_manager=self.experiment_type_manager,
+        )
         if dialog.exec() == QDialog.Accepted:
             return dialog.get_experiment_params()
         return None

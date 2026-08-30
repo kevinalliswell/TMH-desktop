@@ -1,6 +1,8 @@
 from PySide6.QtCore import QObject, Signal
 
 from src.controllers.experiment_controller import ExperimentController
+from src.services.enhanced_experiment_modes import EnhancedExperimentModeManager
+from src.services.experiment_type_manager import ExperimentTypeManager
 
 
 class ExperimentRuntime(QObject):
@@ -14,17 +16,31 @@ class ExperimentRuntime(QObject):
     stage_info_updated = Signal(dict)
     state_changed = Signal(object)  # 转发状态机 state_changed 信号
 
-    def __init__(self, device_manager, data_handler, parent=None):
+    def __init__(
+        self,
+        device_manager,
+        data_handler,
+        parent=None,
+        experiment_mode_manager=None,
+        experiment_type_manager=None,
+    ):
         super().__init__(parent)
         self.device_manager = device_manager
         self.data_handler = data_handler
+        self.experiment_mode_manager = (
+            experiment_mode_manager or EnhancedExperimentModeManager()
+        )
+        self.experiment_type_manager = (
+            experiment_type_manager
+            or ExperimentTypeManager(mode_manager=self.experiment_mode_manager)
+        )
         self._controller = None
         self._signals_connected = False
 
     def ensure_controller(self, confirm_callback=None, input_double_callback=None):
         """创建或获取实验控制器，并注入 UI 交互回调。"""
         if self._controller is None:
-            self._controller = ExperimentController(self.device_manager, self.data_handler, self)
+            self._controller = self._create_controller()
             # 将状态机注入到 DataHandler，让其直接查询状态
             if self.data_handler and hasattr(self._controller, 'state_machine'):
                 self.data_handler.set_state_machine(self._controller.state_machine)
@@ -43,12 +59,26 @@ class ExperimentRuntime(QObject):
 
     def _require_controller(self):
         if self._controller is None:
-            self._controller = ExperimentController(self.device_manager, self.data_handler, self)
+            self._controller = self._create_controller()
             if self.data_handler and hasattr(self._controller, 'state_machine'):
                 self.data_handler.set_state_machine(self._controller.state_machine)
         if not self._signals_connected:
             self._connect_signals()
         return self._controller
+
+    def _create_controller(self):
+        return ExperimentController(
+            self.device_manager,
+            self.data_handler,
+            self,
+            experiment_mode_manager=self.experiment_mode_manager,
+            experiment_type_manager=self.experiment_type_manager,
+        )
+
+    def reload_experiment_modes(self) -> None:
+        """Reload the shared raw, executable, and type-index views together."""
+        self.experiment_mode_manager.reload_custom_programs()
+        self.experiment_type_manager.reload_custom_types()
 
     def _connect_signals(self):
         if not self._controller or self._signals_connected:

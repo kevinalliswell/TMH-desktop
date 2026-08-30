@@ -6,6 +6,7 @@
 
 import json
 import os
+import copy
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 
@@ -32,7 +33,7 @@ class CustomExperimentProgram:
             "description": self.description,
             "stages": [
                 {
-                    "stage_name": stage.stage.value,
+                    "stage_name": stage.stage.name,
                     "description": stage.description,
                     "target_temp": stage.target_temp,
                     "temp_tolerance": stage.temp_tolerance,
@@ -58,6 +59,7 @@ class EnhancedExperimentModeManager(ExperimentModeManager):
         super().__init__()
         self._custom_programs: Dict[str, CustomExperimentProgram] = {}
         self._current_custom_type: Optional[str] = None
+        self._active_custom_program: Optional[CustomExperimentProgram] = None
         self._load_custom_programs()
     
     def _load_custom_programs(self):
@@ -96,6 +98,7 @@ class EnhancedExperimentModeManager(ExperimentModeManager):
             "COOLING": ExperimentStage.COOLING,
             "COMPLETED": ExperimentStage.COMPLETED
         }
+        stage_name_mapping.update({stage.value: stage for stage in ExperimentStage})
         
         for stage_data in stages_data:
             try:
@@ -141,6 +144,7 @@ class EnhancedExperimentModeManager(ExperimentModeManager):
         success = super().set_experiment_mode(experiment_type)
         if success:
             self._current_custom_type = None
+            self._active_custom_program = None
         return success
 
     def set_custom_experiment_mode(self, custom_type_id: str) -> bool:
@@ -150,6 +154,9 @@ class EnhancedExperimentModeManager(ExperimentModeManager):
             return False
         
         self._current_custom_type = custom_type_id
+        self._active_custom_program = copy.deepcopy(
+            self._custom_programs[custom_type_id]
+        )
         self.current_experiment = None  # 清空标准实验
         self.current_stage = ExperimentStage.IDLE
         self.current_stage_index = 0
@@ -162,8 +169,8 @@ class EnhancedExperimentModeManager(ExperimentModeManager):
         """获取当前阶段设置（支持自定义实验）"""
         if self._current_custom_type:
             # 自定义实验模式
-            if self._current_custom_type in self._custom_programs:
-                stages = self._custom_programs[self._current_custom_type].stages
+            if self._active_custom_program is not None:
+                stages = self._active_custom_program.stages
                 if 0 <= self.current_stage_index < len(stages):
                     return stages[self.current_stage_index]
         else:
@@ -181,8 +188,8 @@ class EnhancedExperimentModeManager(ExperimentModeManager):
         """前进到下一阶段（支持自定义实验）"""
         if self._current_custom_type:
             # 自定义实验模式
-            if self._current_custom_type in self._custom_programs:
-                stages = self._custom_programs[self._current_custom_type].stages
+            if self._active_custom_program is not None:
+                stages = self._active_custom_program.stages
                 self.current_stage_index += 1
                 
                 if self.current_stage_index >= len(stages):
@@ -218,15 +225,15 @@ class EnhancedExperimentModeManager(ExperimentModeManager):
     
     def get_experiment_stages(self, experiment_type: ExperimentType = None) -> List[StageSettings]:
         """获取实验阶段（支持自定义实验）"""
+        if experiment_type is not None:
+            return self._experiment_programs.get(experiment_type, [])
         if self._current_custom_type:
             # 自定义实验模式
-            if self._current_custom_type in self._custom_programs:
-                return self._custom_programs[self._current_custom_type].stages
+            if self._active_custom_program is not None:
+                return self._active_custom_program.stages
         else:
             # 标准实验模式
-            if experiment_type:
-                return self._experiment_programs.get(experiment_type, [])
-            elif self.current_experiment:
+            if self.current_experiment:
                 return self._experiment_programs.get(self.current_experiment, [])
         
         return []
@@ -241,6 +248,8 @@ class EnhancedExperimentModeManager(ExperimentModeManager):
     
     def reload_custom_programs(self):
         """重新加载自定义实验程序"""
+        self._custom_modes.clear()
+        self._load_custom_modes()
         self._custom_programs.clear()
         self._load_custom_programs()
     
