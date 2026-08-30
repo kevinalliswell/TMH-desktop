@@ -67,7 +67,7 @@ class CommConfigRepository(CommConfigRepositoryPort):
                 "reg_count": 9,
                 "TEMP_CHANNELS": ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9"],
                 "scale": 0.1,
-                "signed_registers": False,
+                "signed_registers": True,
             },
             "COM_RS232_Balance": {
                 "port": "COM3",
@@ -219,7 +219,7 @@ class CommConfigRepository(CommConfigRepositoryPort):
                 reg_count=int(temp_raw.get("reg_count", 9)),
                 temp_channels=list(temp_raw.get("TEMP_CHANNELS", [])),
                 scale=float(temp_raw.get("scale", 0.1)),
-                signed_registers=bool(temp_raw.get("signed_registers", False)),
+                signed_registers=bool(temp_raw.get("signed_registers", True)),
             ),
             balance=BalanceCommunicationConfig(
                 serial=self._serial_from_raw(balance_raw),
@@ -276,4 +276,3 @@ class CommConfigRepository(CommConfigRepositoryPort):
             "stopbits": config.stopbits,
             "timeout": config.timeout,
         }
-

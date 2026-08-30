@@ -29,7 +29,7 @@
             "T9"
         ],
         "scale": 0.1,
-        "signed_registers": false
+        "signed_registers": true
     },
     "COM_RS232_Balance": {
         "port": "COM15",

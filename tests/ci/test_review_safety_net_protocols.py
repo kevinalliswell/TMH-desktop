@@ -17,6 +17,10 @@ import pytest
 from tmh_comm.protocols.mfc_cpl import MfcCplProtocol, _cpl_checksum
 from tmh_comm.protocols.temp_rtu import TempRtuProtocol, _crc16_modbus
 
+from src.application.dto import SerialPortConfig, TemperatureCommunicationConfig
+from src.device_clients.temp_client import TempClient
+from src.infrastructure.repositories.comm_config_repository import CommConfigRepository
+
 cpl = MfcCplProtocol()
 rtu = TempRtuProtocol()
 
@@ -49,16 +53,63 @@ def test_temp_parse_positive_values_baseline():
     assert temps["T3"] == 45.0
 
 
-@pytest.mark.xfail(strict=True, reason="#70: registers decoded unsigned, -0.5C (0xFFFB) becomes 6553.1C")
-def test_temp_parse_negative_value_expected_signed():
+def test_temp_parse_negative_value_signed():
     temps = rtu.parse_read_all(make_temp_frame(0, [0xFFFB]), scale=0.1)
     assert temps["T1"] == pytest.approx(-0.5)
 
 
-@pytest.mark.xfail(strict=True, reason="#70: burnout code 0xFFFF must surface as a fault, not 6553.5C")
 def test_temp_parse_burnout_code_is_not_a_temperature():
     value = rtu.parse_read_all(make_temp_frame(0, [0xFFFF]), scale=0.1)["T1"]
-    assert value is None or abs(value) < 1000.0
+    assert value is None
+
+
+def test_temp_parse_respects_unsigned_register_setting():
+    temps = rtu.parse_read_all(
+        make_temp_frame(0, [0xFFFB]),
+        scale=0.1,
+        signed_registers=False,
+    )
+    assert temps["T1"] == pytest.approx(6553.1)
+
+
+def test_legacy_temp_client_uses_signed_setting_and_preserves_faults(monkeypatch):
+    monkeypatch.setattr(TempClient, "check_serial_port", lambda self: False)
+    client = TempClient(
+        {
+            "COM_RS485_TEMP": {
+                "port": "COM-NONE",
+                "slave_address": 0,
+                "scale": 0.1,
+                "signed_registers": True,
+            },
+            "SLAVE_ADDRESS_TEMP": {"TEMP": 0},
+        }
+    )
+    monkeypatch.setattr(
+        client,
+        "_send_command",
+        lambda command: make_temp_frame(0, [0xFFFB, 0xFFFF]),
+    )
+
+    temps = client.read_all_temperatures()
+
+    assert temps["T1"] == pytest.approx(-0.5)
+    assert temps["T2"] is None
+
+
+def test_temperature_config_defaults_to_signed_registers():
+    serial = SerialPortConfig(
+        port="COM-TEMP",
+        baudrate=9600,
+        bytesize=8,
+        parity="N",
+        stopbits=1,
+        timeout=1.0,
+    )
+
+    assert TemperatureCommunicationConfig(serial=serial).signed_registers is True
+    repository = CommConfigRepository(config_file="__does_not_exist__.json")
+    assert repository.default_settings["COM_RS485_TEMP"]["signed_registers"] is True
 
 
 # --- mfc_cpl.parse_response --------------------------------------------------
