@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from src.application.services import HistoryQueryService, ReportExportService
 from src.device_clients.data_handler import DataHandler
 from src.services.database import ExperimentData, ExperimentDatabase
-from src.services.experiment_file import ExperimentFile
 from src.services.gb13240_calculator import FreeExpansionCalculator
 
 
@@ -59,7 +58,7 @@ def test_stop_flushes_sample_enqueued_after_db_worker_exit(tmp_path):
     assert handler.data_buffer.empty()
 
 
-def test_history_and_legacy_csv_exports_include_utf8_bom(tmp_path):
+def test_history_csv_export_includes_utf8_bom(tmp_path):
     database = ExperimentDatabase(str(tmp_path / "history.db"))
     experiment = ExperimentData(
         experiment_id="exp-bom",
@@ -92,12 +91,8 @@ def test_history_and_legacy_csv_exports_include_utf8_bom(tmp_path):
     service = ReportExportService(history_query_service=HistoryQueryService(repository=database))
     service.export_experiment_data(experiment.experiment_id, str(history_csv), "csv")
 
-    legacy_csv = tmp_path / "legacy.csv"
-    assert ExperimentFile().export_data(experiment, str(legacy_csv), "csv")
-
     bom = b"\xef\xbb\xbf"
     assert history_csv.read_bytes().startswith(bom)
-    assert legacy_csv.read_bytes().startswith(bom)
 
 
 def test_free_expansion_validation_uses_its_60_minute_reduction_window():

@@ -7,16 +7,13 @@
 UI 相关的导出对话框已迁移至 src/ui/dialogs/data_export_dialog.py
 """
 
-import csv
 import datetime
 from typing import List, Optional, Callable
 
-try:
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, Alignment, PatternFill
-    OPENPYXL_AVAILABLE = True
-except ImportError:
-    OPENPYXL_AVAILABLE = False
+from src.utils.tabular_exporter import (
+    OPENPYXL_AVAILABLE,
+    TabularExporter,
+)
 
 
 class DataSaver:
@@ -24,6 +21,8 @@ class DataSaver:
     数据保存器（纯数据操作，无 UI 依赖）
     支持CSV、XLS、TXT格式的数据导出
     """
+
+    tabular_exporter = TabularExporter
     
     def __init__(self):
         self.supported_formats = ['csv', 'xls', 'txt']
@@ -230,12 +229,7 @@ class DataSaver:
     def _save_csv(self, data: List[List[str]], file_path: str) -> bool:
         """保存为CSV格式"""
         try:
-            with open(file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
-                writer = csv.writer(csvfile)
-                for i, row in enumerate(data):
-                    writer.writerow(row)
-                    progress = int((i + 1) / len(data) * 100)
-                    self._emit_progress(progress)
+            self.tabular_exporter.write_csv(file_path, data, self._emit_progress)
             
             self._emit_finished(True, f"CSV文件保存成功: {file_path}")
             return True
@@ -251,52 +245,16 @@ class DataSaver:
             return False
         
         try:
-            wb = Workbook()
-            ws = wb.active
-            ws.title = "实验数据"
-            
-            # 设置表头样式
-            header_font = Font(bold=True, color="FFFFFF")
-            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-            header_alignment = Alignment(horizontal="center", vertical="center")
-            
             # 计算表头行位置
             header_row = 1
             if experiment_info:
                 header_row = len(self.format_experiment_info(experiment_info)) + 2
-            
-            for row_idx, row in enumerate(data, 1):
-                for col_idx, value in enumerate(row, 1):
-                    cell = ws.cell(row=row_idx, column=col_idx, value=value)
-                    
-                    if row_idx == header_row:
-                        cell.font = header_font
-                        cell.fill = header_fill
-                        cell.alignment = header_alignment
-                    elif experiment_info and row_idx < header_row:
-                        if col_idx == 1:
-                            cell.font = Font(bold=True)
-                        cell.alignment = Alignment(horizontal="left", vertical="center")
-                    else:
-                        cell.alignment = Alignment(horizontal="center", vertical="center")
-                
-                progress = int(row_idx / len(data) * 100)
-                self._emit_progress(progress)
-            
-            # 自动调整列宽
-            for column in ws.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except (TypeError, AttributeError):
-                        pass
-                adjusted_width = min(max_length + 2, 50)
-                ws.column_dimensions[column_letter].width = adjusted_width
-            
-            wb.save(file_path)
+            self.tabular_exporter.write_xlsx(
+                file_path,
+                {"实验数据": data},
+                header_rows={"实验数据": header_row},
+                progress=self._emit_progress,
+            )
             self._emit_finished(True, f"Excel文件保存成功: {file_path}")
             return True
             
@@ -307,13 +265,7 @@ class DataSaver:
     def _save_txt(self, data: List[List[str]], file_path: str) -> bool:
         """保存为TXT格式"""
         try:
-            with open(file_path, 'w', encoding='utf-8') as txtfile:
-                for i, row in enumerate(data):
-                    line = '\t'.join(str(cell) for cell in row)
-                    txtfile.write(line + '\n')
-                    
-                    progress = int((i + 1) / len(data) * 100)
-                    self._emit_progress(progress)
+            self.tabular_exporter.write_text(file_path, data, self._emit_progress)
             
             self._emit_finished(True, f"文本文件保存成功: {file_path}")
             return True
