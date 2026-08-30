@@ -38,6 +38,19 @@ Examples:
 - `fix(device): prevent MFC reconnect loop on timeout`
 - `chore(ci): add tag-driven release workflow`
 
+## Language Style
+
+- Write identifiers, public APIs, and commit messages in English.
+- Keep comments and docstrings in the dominant natural language of the surrounding module.
+  Prefer English in a new general-purpose module; Chinese is appropriate when it makes
+  Chinese national-standard rules, device workflows, or operator-facing behavior clearer.
+- Keep each comment or docstring internally consistent. Avoid switching languages inside
+  one explanation unless a protocol name or official standard term requires it.
+- Use Chinese where appropriate for UI strings, operational logs, and user-facing docs.
+- Do not translate an existing module solely for compliance. Treat a language migration as
+  a focused documentation refactor with its own review, so wording changes do not obscure
+  behavior changes.
+
 ## Pull Requests
 
 1. Branch from the correct base branch.

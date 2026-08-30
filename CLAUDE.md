@@ -25,8 +25,11 @@ python scripts/release_manager.py verify
 
 Conventional Commits with scope: `feat(ui):`, `fix(device):`, `refactor(services):`, `test(ci):`, `chore(release):`, `docs:`.
 
-- English in code, comments, and commit messages
-- Chinese in UI strings, log messages, and user-facing documentation
+- Use English for identifiers, public APIs, and commit messages.
+- Comments and docstrings follow the module-consistency policy in `CONTRIBUTING.md`;
+  do not mix languages within one explanation merely to satisfy a blanket rule.
+- Use Chinese where appropriate for UI strings, log messages, Chinese-standard terminology,
+  and user-facing documentation.
 
 ## Branch Strategy (Gitflow)
 
