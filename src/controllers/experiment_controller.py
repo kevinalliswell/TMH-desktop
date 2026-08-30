@@ -12,7 +12,7 @@ import uuid
 import logging
 from datetime import datetime
 from typing import Optional, Callable, Tuple
-from PySide6.QtCore import QCoreApplication, QObject, Signal, QTimer
+from PySide6.QtCore import QObject, Signal, QTimer
 
 from src.models.experiment_state import (
     ExperimentStateMachine,
@@ -78,6 +78,8 @@ class ExperimentController(QObject):
         self.experiment_type_manager = ExperimentTypeManager()
         self.current_experiment_type = None
         self.current_experiment_type_name = None
+        self._clock = time.monotonic
+        self._manual_initial_weight_in_progress = False
         
         # 初始化定时器
         self._init_timers()
@@ -398,7 +400,7 @@ class ExperimentController(QObject):
 
     def _begin_experiment_common(self) -> None:
         """实验启动的公共逻辑（提取自 start_experiment 和 _dev_start_experiment）"""
-        now = time.time()
+        now = self._clock()
         self._sm.transition_to(
             ExperimentPhase.RUNNING,
             experiment_id=self.current_experiment.experiment_id,
@@ -419,6 +421,41 @@ class ExperimentController(QObject):
 
         # 执行第一个阶段
         self.execute_current_experiment_stage()
+
+    def _recover_failed_start(self, error: Exception) -> None:
+        """Undo any partially-started runtime state after startup fails."""
+        runtime_started = (
+            self.stage_timer.isActive()
+            or self.experiment_duration_updater.isActive()
+            or self._sm.is_running
+        )
+        self.stage_timer.stop()
+        self.experiment_duration_updater.stop()
+
+        if runtime_started:
+            try:
+                self._set_safety_atmosphere()
+            except Exception as safety_error:
+                self.logger.error(f"启动失败后设置安全气氛失败: {safety_error}")
+
+        phase = self._sm.phase
+        try:
+            if phase == ExperimentPhase.CONFIGURING:
+                self._sm.transition_to(ExperimentPhase.IDLE)
+            elif phase in (ExperimentPhase.RUNNING, ExperimentPhase.STAGE_TRANSITION):
+                self._sm.transition_to(
+                    ExperimentPhase.ERROR,
+                    error_message=str(error),
+                )
+                self._sm.transition_to(ExperimentPhase.IDLE)
+            elif phase in (
+                ExperimentPhase.COMPLETING,
+                ExperimentPhase.STOPPING,
+                ExperimentPhase.ERROR,
+            ):
+                self._sm.transition_to(ExperimentPhase.IDLE)
+        except InvalidTransitionError:
+            self._sm.reset()
 
     def _get_experiment_display_name(self) -> str:
         """获取实验显示名称（提取公共逻辑）"""
@@ -482,6 +519,11 @@ class ExperimentController(QObject):
         if self._sm.is_running:
             self.logger.warning("实验已在运行中")
             return False
+
+        if not self.experiment_mode_manager.get_experiment_stages():
+            self.logger.warning("实验模式没有可执行阶段")
+            self.system_message_updated.emit("实验模式没有可执行阶段，无法启动实验")
+            return False
         
         try:
             # 转入 CONFIGURING 阶段
@@ -523,19 +565,21 @@ class ExperimentController(QObject):
 
         except InvalidTransitionError as e:
             self.logger.error(f"启动实验失败（状态转换错误）: {e}")
+            self._recover_failed_start(e)
             audit(AuditCategory.EXPERIMENT, "start", result=AuditResult.FAILURE, error=str(e))
             return False
         except Exception as e:
             self.logger.error(f"启动实验失败: {str(e)}")
-            # 出错后尝试回到 IDLE
-            try:
-                self._sm.transition_to(ExperimentPhase.IDLE)
-            except InvalidTransitionError:
-                self._sm.reset()
+            self._recover_failed_start(e)
             return False
 
     def _dev_start_experiment(self) -> bool:
         """开发模式：启动实验，模拟正式实验流程"""
+        if not self.experiment_mode_manager.get_experiment_stages():
+            self.logger.warning("实验模式没有可执行阶段")
+            self.system_message_updated.emit("实验模式没有可执行阶段，无法启动实验")
+            return False
+
         try:
             # 转入 CONFIGURING 阶段
             self._sm.transition_to(ExperimentPhase.CONFIGURING)
@@ -563,10 +607,7 @@ class ExperimentController(QObject):
             return True
         except Exception as e:
             self.logger.error(f"启动实验失败: {str(e)}")
-            try:
-                self._sm.transition_to(ExperimentPhase.IDLE)
-            except InvalidTransitionError:
-                self._sm.reset()
+            self._recover_failed_start(e)
             return False
     
     def stop_experiment(self) -> bool:
@@ -631,7 +672,7 @@ class ExperimentController(QObject):
         
         # 通过状态机更新阶段开始时间和阶段索引
         self._sm.update_state_silent(
-            stage_start_time=time.time(),
+            stage_start_time=self._clock(),
             current_stage_index=self.experiment_mode_manager.current_stage_index,
             total_stages=len(self.experiment_mode_manager.get_experiment_stages()),
         )
@@ -686,7 +727,7 @@ class ExperimentController(QObject):
         
         # 从状态机获取阶段开始时间（线程安全）
         state = self._sm.get_state()
-        elapsed_time = time.time() - state.stage_start_time
+        elapsed_time = max(0.0, self._clock() - state.stage_start_time)
         
         # 发送详细的阶段信息更新信号
         self._emit_stage_info_update(current_stage, current_temp, elapsed_time)
@@ -839,6 +880,12 @@ class ExperimentController(QObject):
         Returns:
             bool: 设置是否成功
         """
+        if self._manual_initial_weight_in_progress:
+            self.logger.warning("初始重量设置正在进行，忽略重复请求")
+            self.system_message_updated.emit("初始重量设置正在进行，请勿重复操作")
+            return False
+
+        self._manual_initial_weight_in_progress = True
         try:
             # 第一步：执行天平去皮（跳过确认对话框，因为这是设置初始重量流程的一部分）
             self.system_message_updated.emit("正在执行天平去皮...")
@@ -848,9 +895,6 @@ class ExperimentController(QObject):
                 self.system_message_updated.emit("天平去皮失败，无法设置初始重量")
                 return False
                 
-            # 让事件循环处理待处理事件，使天平读数稳定
-            QCoreApplication.processEvents()
-            
             # 第二步：获取当前天平读数（去皮后应该接近0）
             current_balance_weight = 0.0
             if self.device_manager and hasattr(self.device_manager, 'balance'):
@@ -897,6 +941,8 @@ class ExperimentController(QObject):
             self.system_message_updated.emit(error_msg)
             self.logger.error(error_msg)
             return False
+        finally:
+            self._manual_initial_weight_in_progress = False
     
     def _set_safety_atmosphere(self) -> None:
         """设置安全气氛"""
@@ -909,7 +955,9 @@ class ExperimentController(QObject):
     def _update_experiment_time_internal(self) -> None:
         """内部实验时间更新"""
         state = self._sm.get_state()
-        new_elapsed = state.elapsed_seconds + 1
+        if not state.is_running:
+            return
+        new_elapsed = max(0, int(self._clock() - state.experiment_start_time))
         self._sm.update_state_silent(elapsed_seconds=new_elapsed)
         
         # 发送计时更新信号
@@ -1077,7 +1125,7 @@ class ExperimentController(QObject):
                 return self._get_default_stage_info()
             
             current_temp = self.get_sample_temperature()
-            elapsed_time = time.time() - state.stage_start_time
+            elapsed_time = max(0.0, self._clock() - state.stage_start_time)
             
             return {
                 "current_stage_index": self.experiment_mode_manager.current_stage_index + 1,

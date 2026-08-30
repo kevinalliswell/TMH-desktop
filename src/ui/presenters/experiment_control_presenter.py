@@ -64,6 +64,9 @@ class ExperimentControlPresenter:
 
             stop_result = self.workflow_service.stop_experiment()
             if not stop_result.success:
+                if not self.experiment_api.is_experiment_running():
+                    self.logger.info("停止确认期间实验已自然结束")
+                    return
                 self.view.show_error("错误", stop_result.message)
         except Exception as exc:
             self.view.show_error("错误", f"停止实验时发生错误：{exc}")

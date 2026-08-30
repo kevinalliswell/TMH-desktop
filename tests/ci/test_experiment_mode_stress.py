@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sqlite3
-import time
 from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication
@@ -50,7 +49,7 @@ def _force_stage_ready(controller, device_hub: FakeDeviceHub, stage) -> None:
     device_hub.temperature = stage.target_temp
     elapsed_seconds = stage.duration * 60 + 1 if stage.duration > 0 else 1
     controller.state_machine.update_state_silent(
-        stage_start_time=time.time() - elapsed_seconds
+        stage_start_time=controller._clock() - elapsed_seconds
     )
 
 
