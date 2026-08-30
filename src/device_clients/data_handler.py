@@ -2,6 +2,7 @@
 import threading
 import time
 import sqlite3
+import math
 from PySide6.QtCore import QObject, Signal
 import queue
 from datetime import datetime
@@ -564,14 +565,17 @@ class DataHandler(QObject):
                 payload = getattr(flow_frame, "payload", {})
                 flows_data[gas_type] = {"PV": payload.get("pv")}
             
-            # 获取样品温度（假设T8是样品温度）
-            sample_temp = temperature_data.get("T8", 0.0) if temperature_data else 0.0
+            # 获取样品温度（假设T8是样品温度）。数据库数值列保持非空，
+            # 同时用 data_quality 区分真实的 0 和设备无有效读数时的兜底值。
+            sample_temp, temperature_valid = self._coerce_numeric_sample(
+                temperature_data.get("T8") if temperature_data else None
+            )
             
             # 获取重量数据（天平断线时 weight 可能为 None，dict.get 的默认值不会生效，
             # 需显式兜底为 0.0，否则后续减重率计算会 TypeError 并静默丢弃整点数据）
-            current_weight = (weight_data or {}).get("weight")
-            if current_weight is None:
-                current_weight = 0.0
+            current_weight, weight_valid = self._coerce_numeric_sample(
+                (weight_data or {}).get("weight")
+            )
 
             # 计算减重率
             weight_loss = 0.0
@@ -579,16 +583,20 @@ class DataHandler(QObject):
                 weight_loss = ((self.initial_weight - current_weight) / self.initial_weight) * 100
             
             # 获取气体流量数据
-            co_flow = 0.0
-            co2_flow = 0.0
-            n2_flow = 0.0
-            h2_flow = 0.0
-            
-            if flows_data:
-                co_flow = flows_data.get("CO", {}).get("PV", 0.0) if isinstance(flows_data.get("CO"), dict) else flows_data.get("CO", 0.0)
-                co2_flow = flows_data.get("CO2", {}).get("PV", 0.0) if isinstance(flows_data.get("CO2"), dict) else flows_data.get("CO2", 0.0)
-                n2_flow = flows_data.get("N2", {}).get("PV", 0.0) if isinstance(flows_data.get("N2"), dict) else flows_data.get("N2", 0.0)
-                h2_flow = flows_data.get("H2", {}).get("PV", 0.0) if isinstance(flows_data.get("H2"), dict) else flows_data.get("H2", 0.0)
+            flow_samples = {}
+            for gas_type in ("CO", "CO2", "N2", "H2"):
+                flow_data = flows_data.get(gas_type)
+                raw_value = (
+                    flow_data.get("PV")
+                    if isinstance(flow_data, dict)
+                    else flow_data
+                )
+                flow_samples[gas_type] = self._coerce_numeric_sample(raw_value)
+
+            co_flow, co_valid = flow_samples["CO"]
+            co2_flow, co2_valid = flow_samples["CO2"]
+            n2_flow, n2_valid = flow_samples["N2"]
+            h2_flow, h2_valid = flow_samples["H2"]
             
             # 计算实验持续时间
             experiment_duration = ""
@@ -611,7 +619,17 @@ class DataHandler(QObject):
                 'n2_flow': n2_flow,
                 'h2_flow': h2_flow,
                 'experiment_status': '运行中',
-                'system_message': '数据采集'
+                'system_message': '数据采集',
+                'data_quality': {
+                    'temperature': temperature_valid,
+                    'weight': weight_valid,
+                    'flows': {
+                        'CO': co_valid,
+                        'CO2': co2_valid,
+                        'N2': n2_valid,
+                        'H2': h2_valid,
+                    },
+                },
             }
             
             # 保存到实验数据库
@@ -623,3 +641,15 @@ class DataHandler(QObject):
                 
         except Exception as e:
             self.logger.error(f"保存实验数据点失败: {e}")
+
+    @staticmethod
+    def _coerce_numeric_sample(value):
+        """Return a finite numeric value and whether the source reading was valid."""
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return 0.0, False
+
+        if not math.isfinite(numeric_value):
+            return 0.0, False
+        return numeric_value, True

@@ -119,6 +119,7 @@ class ExperimentDatabase:
                     h2_flow REAL NOT NULL,
                     experiment_status TEXT,
                     system_message TEXT,
+                    data_quality TEXT NOT NULL DEFAULT '{}',
                     FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id)
                 )
             """)
@@ -139,6 +140,13 @@ class ExperimentDatabase:
                 if 'system_message' not in columns:
                     cursor.execute("ALTER TABLE experiment_data ADD COLUMN system_message TEXT;")
                     logger.info("Added 'system_message' column to 'experiment_data' table.")
+
+                if 'data_quality' not in columns:
+                    cursor.execute(
+                        "ALTER TABLE experiment_data "
+                        "ADD COLUMN data_quality TEXT NOT NULL DEFAULT '{}';"
+                    )
+                    logger.info("Added 'data_quality' column to 'experiment_data' table.")
                     
             except sqlite3.Error as e:
                 logger.error(f"Error checking/adding new columns to 'experiment_data' table: {e}")
@@ -236,8 +244,9 @@ class ExperimentDatabase:
                         INSERT INTO experiment_data (
                             experiment_id, timestamp, experiment_duration, temperature,
                             weight, weight_loss, co_flow, co2_flow,
-                            n2_flow, h2_flow, experiment_status, system_message
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            n2_flow, h2_flow, experiment_status, system_message,
+                            data_quality
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         experiment_id,
                         data['timestamp'],
@@ -250,7 +259,12 @@ class ExperimentDatabase:
                         data['n2_flow'],
                         data['h2_flow'],
                         data.get('experiment_status', ''),
-                        data.get('system_message', '')
+                        data.get('system_message', ''),
+                        json.dumps(
+                            data.get('data_quality', {}),
+                            ensure_ascii=False,
+                            separators=(',', ':'),
+                        )
                     ))
                     return True
             except sqlite3.OperationalError as e:
@@ -331,6 +345,12 @@ class ExperimentDatabase:
                     data_point['h2_flow'] = float(row[column_mapping.get('h2_flow', 10)]) if len(row) > column_mapping.get('h2_flow', 10) and row[column_mapping.get('h2_flow', 10)] is not None else 0.0
                     data_point['experiment_status'] = row[column_mapping.get('experiment_status', 11)] if len(row) > column_mapping.get('experiment_status', 11) else ''
                     data_point['system_message'] = row[column_mapping.get('system_message', 12)] if len(row) > column_mapping.get('system_message', 12) else ''
+                    quality_index = column_mapping.get('data_quality')
+                    quality_value = row[quality_index] if quality_index is not None and len(row) > quality_index else '{}'
+                    try:
+                        data_point['data_quality'] = json.loads(quality_value or '{}')
+                    except (TypeError, json.JSONDecodeError):
+                        data_point['data_quality'] = {}
                     
                     result.append(data_point)
                 
