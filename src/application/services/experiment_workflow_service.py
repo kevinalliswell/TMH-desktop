@@ -124,6 +124,7 @@ class ExperimentWorkflowService:
 
         mode_result = self.configure_experiment_mode(experiment_params)
         if not mode_result.success:
+            self._remove_startup_file(start_record.experiment_file_path)
             return ExperimentStartResult(
                 False,
                 mode_result.message,

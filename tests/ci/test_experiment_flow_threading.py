@@ -339,7 +339,7 @@ def test_final_stage_completion_returns_to_idle_and_sets_safety_gas(tmp_path, mo
         device_hub.temperature = stages[final_stage_index].target_temp
         controller.state_machine.update_state_silent(
             current_stage_index=final_stage_index,
-            stage_start_time=time.time() - 1,
+            stage_start_time=controller._clock() - 1,
         )
 
         controller.update_experiment_stage()
@@ -428,5 +428,112 @@ def test_workflow_start_result_uses_runtime_experiment_id(tmp_path, monkeypatch)
 
         assert start_result.success is True
         assert start_result.experiment_id == controller.current_experiment.experiment_id
+    finally:
+        _stop_and_cleanup(controller)
+
+
+def test_start_failure_after_timers_arm_restores_idle_and_safety_gas(
+    tmp_path, monkeypatch
+):
+    controller, device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
+
+    def fail_first_stage():
+        raise RuntimeError("stage setup failed")
+
+    try:
+        assert controller.set_experiment_mode_by_id("GB_13242_2017") is True
+        monkeypatch.setattr(controller, "execute_current_experiment_stage", fail_first_stage)
+
+        assert controller.start_experiment() is False
+
+        assert controller.state_machine.get_state().phase == ExperimentPhase.IDLE
+        assert not controller.stage_timer.isActive()
+        assert not controller.experiment_duration_updater.isActive()
+        assert device_hub.flow_calls[-4:] == [
+            ("N2", 5.0),
+            ("CO", 0.0),
+            ("CO2", 0.0),
+            ("H2", 0.0),
+        ]
+    finally:
+        _stop_and_cleanup(controller)
+
+
+def test_empty_custom_program_is_rejected_before_record_or_signals(tmp_path, monkeypatch):
+    controller, _device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
+    db_path = tmp_path / "runtime_experiments.db"
+    lifecycle_events: list[str] = []
+    controller.experiment_started.connect(lambda: lifecycle_events.append("started"))
+    controller.experiment_completed.connect(lambda: lifecycle_events.append("completed"))
+
+    try:
+        controller.current_experiment_type = None
+        controller.current_experiment_type_name = "Empty custom program"
+        monkeypatch.setattr(controller.experiment_mode_manager, "is_custom_mode", lambda: True)
+        monkeypatch.setattr(
+            controller.experiment_mode_manager,
+            "get_experiment_stages",
+            lambda: [],
+        )
+
+        assert controller.start_experiment() is False
+
+        assert controller.state_machine.get_state().phase == ExperimentPhase.IDLE
+        assert lifecycle_events == []
+        assert _count_experiments(db_path) == 0
+    finally:
+        _stop_and_cleanup(controller)
+
+
+def test_controller_uses_monotonic_clock_for_elapsed_time(tmp_path, monkeypatch):
+    controller, _device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
+    clock = iter((100.0, 100.0, 130.0))
+    monkeypatch.setattr(controller, "_clock", lambda: next(clock), raising=False)
+
+    try:
+        assert controller.set_experiment_mode_by_id("GB_13242_2017") is True
+        assert controller.start_experiment() is True
+        assert controller.state_machine.get_state().stage_start_time == pytest.approx(100.0)
+
+        stage_info = controller.get_detailed_stage_info()
+
+        assert stage_info["elapsed_time_seconds"] == pytest.approx(30.0)
+    finally:
+        _stop_and_cleanup(controller)
+
+
+def test_manual_initial_weight_rejects_reentrant_invocation(tmp_path, monkeypatch):
+    controller, device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
+    nested_results: list[bool] = []
+
+    def request_weight(*_args):
+        nested_results.append(controller.manual_set_initial_weight())
+        return 12.5, True
+
+    controller.set_interaction_callbacks(input_double_callback=request_weight)
+
+    try:
+        assert controller.manual_set_initial_weight() is True
+
+        assert nested_results == [False]
+        assert device_hub.tare_calls == 1
+        assert controller.initial_weight == pytest.approx(12.5)
+    finally:
+        _stop_and_cleanup(controller)
+
+
+def test_mode_configuration_failure_removes_precreated_experiment_file(
+    tmp_path, monkeypatch
+):
+    controller, device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
+    workflow = _build_workflow(controller, device_hub)
+    monkeypatch.setattr(workflow.experiment_api, "set_experiment_mode_by_id", lambda _mode: False)
+
+    try:
+        start_result = workflow.start_experiment(_experiment_params())
+
+        assert start_result.success is False
+        assert start_result.experiment_file_path
+        assert not Path(start_result.experiment_file_path).exists()
     finally:
         _stop_and_cleanup(controller)
