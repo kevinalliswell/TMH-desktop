@@ -621,7 +621,15 @@ class CommunicationSettings(QWidget):
             if apply_callback is None and self.runtime:
                 apply_callback = self.runtime.apply_comm_settings
             if apply_callback:
-                apply_callback()
+                applied = apply_callback()
+                if applied is False:
+                    QMessageBox.critical(
+                        self,
+                        "设置尚未应用",
+                        "设置已保存，但活动实验未能安全停止，因此未重启通信服务。"
+                        "请先处理安全告警，再重新应用设置。",
+                    )
+                    return
                 QMessageBox.information(self, "提示", "设置已保存并已应用")
             else:
                 QMessageBox.information(self, "提示", "设置已保存（重启后生效）")
