@@ -31,7 +31,17 @@ class SerialCommand:
         self.timeout = timeout
         self.timestamp = time.time()
         self.result = None
+        self.started = threading.Event()
+        self.cancelled = threading.Event()
         self.completed = threading.Event()
+
+    def try_start(self) -> bool:
+        """Mark the command started unless its caller already cancelled it."""
+        if self.cancelled.is_set():
+            self.completed.set()
+            return False
+        self.started.set()
+        return True
     
     def __lt__(self, other):
         # 优先级队列排序：优先级数字越小越优先
@@ -216,6 +226,10 @@ class MultiMFCClient(BaseDevice):
                     # 检查是否为停止命令
                     if not self._command_processor_running or command.cmd_bytes == b'':
                         break
+
+                    if not command.try_start():
+                        self._command_queue.task_done()
+                        continue
                     
                     # 执行命令
                     result = self._execute_serial_command(command)
@@ -255,6 +269,9 @@ class MultiMFCClient(BaseDevice):
                 
             # 尝试指定次数
             for attempt in range(self.MAX_RETRIES):
+                if command.cancelled.is_set():
+                    self.logger.warning("命令已取消，停止串口重试")
+                    return None
                 try:
                     # 清空缓冲区
                     self.serial_port.reset_input_buffer()
@@ -272,6 +289,9 @@ class MultiMFCClient(BaseDevice):
                     response = b''
                     
                     while time.time() - start_time < command.timeout:
+                        if command.cancelled.is_set():
+                            self.logger.warning("命令已取消，停止等待串口响应")
+                            return None
                         if self.serial_port.in_waiting > 0:
                             new_data = self.serial_port.read(self.serial_port.in_waiting)
                             response += new_data
@@ -290,9 +310,8 @@ class MultiMFCClient(BaseDevice):
                     if response:
                         self.logger.warning(f"接收到不完整响应: {response}")
                         self._serial_last_used = time.time()
-                        return response
-                        
-                    self.logger.warning(f"命令超时 (尝试 {attempt+1}/{self.MAX_RETRIES})")
+                    else:
+                        self.logger.warning(f"命令超时 (尝试 {attempt+1}/{self.MAX_RETRIES})")
                     
                 except Exception as e:
                     self.logger.error(f"执行命令出错: {e}")
@@ -302,6 +321,32 @@ class MultiMFCClient(BaseDevice):
                     time.sleep(self.RETRY_DELAY)
             
             return None
+
+    def _command_execution_timeout(self, command: SerialCommand) -> float:
+        """Upper bound for all serial attempts after a command starts."""
+        per_attempt_overhead = 0.1
+        return (
+            self.MAX_RETRIES * (command.timeout + per_attempt_overhead)
+            + max(0, self.MAX_RETRIES - 1) * self.RETRY_DELAY
+            + 0.25
+        )
+
+    def _wait_for_command(self, command: SerialCommand) -> bool:
+        """Wait for queue dispatch and every retry, cancelling stale queued work."""
+        queue_wait_timeout = max(1.0, command.timeout)
+        if not command.started.wait(timeout=queue_wait_timeout):
+            if command.completed.is_set():
+                return True
+            command.cancelled.set()
+            self.logger.warning("命令排队超时，已取消未执行命令")
+            return False
+
+        if command.completed.wait(timeout=self._command_execution_timeout(command)):
+            return True
+
+        command.cancelled.set()
+        self.logger.warning("命令执行超过完整重试窗口，已请求取消")
+        return False
 
     def _has_matching_response(self, command: bytes, response: bytes) -> bool:
         """Check whether ``response`` contains a valid reply to ``command``."""
@@ -367,8 +412,8 @@ class MultiMFCClient(BaseDevice):
         # self.logger.info(f"发送指令：{cmd}")
         command = self._send_command_async(cmd, CommandPriority.NORMAL)
         
-        # 等待命令完成
-        if command.completed.wait(timeout=self.COMMAND_TIMEOUT + 1.0):
+        # 等待排队和完整重试窗口；超时的排队命令会被取消，不会稍后静默执行。
+        if self._wait_for_command(command):
             return command.result
         else:
             self.logger.warning("命令执行超时")
@@ -575,7 +620,7 @@ class MultiMFCClient(BaseDevice):
         # 获取该气体的缩放系数
         scaling_factor = self._get_scaling_factor(gas_type)
         # 缩放逻辑：设备值 = 输入值 / 缩放系数
-        scaled_value = int(value / scaling_factor * 10)
+        scaled_value = round(value / scaling_factor * 10)
         self.logger.info(f"为 {gas_type} 设置缩放值: {scaled_value} (输入: {value} L/min, 缩放系数: {scaling_factor})")
 
         try:
@@ -589,8 +634,8 @@ class MultiMFCClient(BaseDevice):
             # 使用高优先级异步命令，避免阻塞数据采集
             command = self._send_command_async(cmd, CommandPriority.HIGH, self.WRITE_COMMAND_TIMEOUT)
             
-            # 等待命令完成，设置较短的超时时间以避免UI阻塞
-            if not command.completed.wait(timeout=self.WRITE_COMMAND_TIMEOUT + 1.0):
+            # 等待排队和完整重试窗口，避免调用方报失败后后台重试又写成功。
+            if not self._wait_for_command(command):
                 self.logger.error(f"{gas_type} 流量设定命令超时")
                 return False
 
