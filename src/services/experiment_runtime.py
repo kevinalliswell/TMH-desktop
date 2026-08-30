@@ -151,6 +151,3 @@ class ExperimentRuntime(QObject):
         if controller and hasattr(controller, "initial_weight"):
             return controller.initial_weight or 0.0
         return 0.0
-
-    def dev_start_experiment(self) -> bool:
-        return self._require_controller()._dev_start_experiment()

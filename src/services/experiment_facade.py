@@ -6,7 +6,6 @@ class ExperimentFacade:
 
     def __init__(self, runtime: ExperimentRuntime):
         self._runtime = runtime
-        self._signal_connections = []
 
     # -- 信号代理属性，方便 UI 直接 connect --
     @property
@@ -48,52 +47,6 @@ class ExperimentFacade:
             input_double_callback=input_double_callback,
         )
 
-    # 保留旧 API 别名
-    ensure_ready = ensure_controller
-
-    def connect_signals(
-        self,
-        status_cb,
-        system_cb,
-        started_cb,
-        stopped_cb,
-        time_cb,
-        stage_cb,
-        state_changed_cb=None,
-        completed_cb=None,
-    ):
-        """连接信号并记录连接，以便 cleanup 时断开"""
-        pairs = [
-            (self._runtime.status_updated, status_cb),
-            (self._runtime.system_message_updated, system_cb),
-            (self._runtime.experiment_started, started_cb),
-            (self._runtime.experiment_stopped, stopped_cb),
-            (self._runtime.experiment_time_updated, time_cb),
-            (self._runtime.stage_info_updated, stage_cb),
-        ]
-        if state_changed_cb is not None:
-            pairs.append((self._runtime.state_changed, state_changed_cb))
-        if completed_cb is not None:
-            pairs.append((self._runtime.experiment_completed, completed_cb))
-        for signal, slot in pairs:
-            signal.connect(slot)
-            self._signal_connections.append((signal, slot))
-
-    def disconnect_signals(self):
-        """断开所有通过 connect_signals 建立的连接"""
-        for signal, slot in self._signal_connections:
-            try:
-                signal.disconnect(slot)
-            except (RuntimeError, TypeError):
-                pass
-        self._signal_connections.clear()
-
-    def cleanup(self):
-        """清理资源"""
-        self.disconnect_signals()
-        if self._runtime:
-            self._runtime.cleanup()
-
     def check_experiment_params(self) -> bool:
         return self._runtime.check_experiment_params()
 
@@ -129,9 +82,6 @@ class ExperimentFacade:
 
     def get_initial_weight(self) -> float:
         return self._runtime.get_initial_weight()
-
-    def dev_start_experiment(self) -> bool:
-        return self._runtime.dev_start_experiment()
 
     def get_controller(self):
         return self._runtime.get_controller()
