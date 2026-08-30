@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QLabel, QPushButton, QLineEdit, QTableWidget,
                                QTableWidgetItem, QMessageBox, QInputDialog,
-                               QFileDialog, QSplitter, QTabWidget,
-                               QHeaderView)
+                               QFileDialog, QSplitter, QTabWidget, QTableView,
+                               QAbstractItemView, QHeaderView)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QShortcut, QKeySequence
 import pyqtgraph as pg
@@ -21,10 +21,16 @@ from src.services.gb13241_calculator import ReductionCalculator
 from src.services.gb13242_calculator import LowTempDegradationCalculator
 from src.services.gb13240_calculator import FreeExpansionCalculator
 from src.ui.dialogs.rdi_analysis_dialog import RDIAnalysisDialog
+from src.ui.models.history_data_table_model import (
+    HistoryDataTableModel,
+    select_plot_indices,
+)
 
 
 class HistoryQuery(QWidget):
     """历史数据查询界面"""
+
+    MAX_PLOT_POINTS = 5_000
 
     def __init__(
         self,
@@ -173,6 +179,17 @@ class HistoryQuery(QWidget):
         self.co2_curve = self.plot_widget.plot([], [], pen=pg.mkPen('y', width=2), name='CO₂(L/min)')
         self.h2_curve = self.plot_widget.plot([], [], pen=pg.mkPen('m', width=2), name='H₂(L/min)')
 
+        for curve in (
+            self.temp_curve,
+            self.weight_curve,
+            self.n2_curve,
+            self.co_curve,
+            self.co2_curve,
+            self.h2_curve,
+        ):
+            curve.setClipToView(True)
+            curve.setDownsampling(auto=True, method="peak")
+
         plot_layout.addWidget(self.plot_widget)
 
         # 数据表格
@@ -180,16 +197,19 @@ class HistoryQuery(QWidget):
         data_table_layout = QVBoxLayout(data_table_container)
         data_table_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.data_table = QTableWidget()
-        self.data_table.setColumnCount(9)
-        self.data_table.setHorizontalHeaderLabels([
-            "时间", "实验时长(min)", "温度(℃)", "重量(g)", "失重(%)",
-            "CO(L/min)", "CO₂(L/min)", "N₂(L/min)", "H₂(L/min)"
-        ])
-        self.data_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.data_table.setSelectionMode(QTableWidget.SingleSelection)
+        self.data_table = QTableView()
+        self.history_data_model = HistoryDataTableModel(self.data_table)
+        self.data_table.setModel(self.history_data_model)
+        self.data_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.data_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.data_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.data_table.setAlternatingRowColors(True)
         self.data_table.setSortingEnabled(False)
+        self.data_table.setWordWrap(False)
+        self.data_table.verticalHeader().setVisible(False)
+        self.data_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        for column, width in enumerate((155, 110, 90, 90, 90, 90, 90, 90, 90)):
+            self.data_table.setColumnWidth(column, width)
 
         data_table_layout.addWidget(self.data_table)
 
@@ -289,7 +309,7 @@ class HistoryQuery(QWidget):
         self.co_curve.setData([], [])
         self.co2_curve.setData([], [])
         self.h2_curve.setData([], [])
-        self.data_table.setRowCount(0)
+        self.history_data_model.clear()
 
     def _load_experiment_data_points(self, experiment_id: str):
         """按需加载单个实验数据点，返回解析后的数据字典"""
@@ -340,25 +360,48 @@ class HistoryQuery(QWidget):
 
             start_time = datetime.fromisoformat(experiment["start_time"])
             minutes = []
-            for t in raw_timestamps:
+            for timestamp in raw_timestamps:
                 try:
-                    timestamp_dt = datetime.fromisoformat(t)
+                    timestamp_dt = datetime.fromisoformat(str(timestamp))
                 except ValueError:
                     try:
-                        timestamp_dt = datetime.fromtimestamp(float(t))
+                        timestamp_dt = datetime.fromtimestamp(float(timestamp))
                     except (ValueError, TypeError) as e:
-                        self.logger.warning(f"无法解析时间戳 {t}: {e}")
+                        self.logger.warning(f"无法解析时间戳 {timestamp}: {e}")
+                        minutes.append(None)
                         continue
                 minutes.append((timestamp_dt - start_time).total_seconds() / 60)
 
-            self.temp_curve.setData(minutes, experiment["temperatures"][:len(minutes)])
-            self.weight_curve.setData(minutes, experiment["weights"][:len(minutes)])
-
+            valid_indices = [index for index, value in enumerate(minutes) if value is not None]
             gas_flows = experiment.get("gas_flows", {})
-            self.n2_curve.setData(minutes, gas_flows.get("N2", [])[:len(minutes)])
-            self.co_curve.setData(minutes, gas_flows.get("CO", [])[:len(minutes)])
-            self.co2_curve.setData(minutes, gas_flows.get("CO2", [])[:len(minutes)])
-            self.h2_curve.setData(minutes, gas_flows.get("H2", [])[:len(minutes)])
+            plot_series = [
+                experiment["temperatures"],
+                experiment["weights"],
+                gas_flows.get("N2", []),
+                gas_flows.get("CO", []),
+                gas_flows.get("CO2", []),
+                gas_flows.get("H2", []),
+            ]
+            plot_indices = select_plot_indices(
+                valid_indices,
+                self.MAX_PLOT_POINTS,
+                series=plot_series,
+            )
+            plot_minutes = [minutes[index] for index in plot_indices]
+
+            def plot_values(values):
+                return [
+                    values[index] if index < len(values) else float("nan")
+                    for index in plot_indices
+                ]
+
+            self.temp_curve.setData(plot_minutes, plot_values(experiment["temperatures"]))
+            self.weight_curve.setData(plot_minutes, plot_values(experiment["weights"]))
+
+            self.n2_curve.setData(plot_minutes, plot_values(gas_flows.get("N2", [])))
+            self.co_curve.setData(plot_minutes, plot_values(gas_flows.get("CO", [])))
+            self.co2_curve.setData(plot_minutes, plot_values(gas_flows.get("CO2", [])))
+            self.h2_curve.setData(plot_minutes, plot_values(gas_flows.get("H2", [])))
 
             self.update_data_table(experiment, minutes)
 
@@ -367,59 +410,12 @@ class HistoryQuery(QWidget):
             QMessageBox.critical(self, "错误", f"加载实验数据失败：{str(e)}")
 
     def update_data_table(self, experiment, timestamps):
-        """更新实验数据表格（批量预分配行数）"""
+        """通过虚拟模型更新表格，不为每个数据单元创建 widget。"""
         try:
-            temperatures = experiment.get("temperatures", [])
-            weights = experiment.get("weights", [])
-            weight_losses = experiment.get("weight_losses", [])
-            gas_flows = experiment.get("gas_flows", {})
-            co_flows = gas_flows.get("CO", [])
-            co2_flows = gas_flows.get("CO2", [])
-            n2_flows = gas_flows.get("N2", [])
-            h2_flows = gas_flows.get("H2", [])
-            raw_timestamps = experiment.get("timestamps", [])
-
-            row_count = max(len(timestamps), len(temperatures), len(weights),
-                           len(weight_losses), len(co_flows), len(co2_flows),
-                           len(n2_flows), len(h2_flows))
-
-            self.data_table.setRowCount(row_count)
-
-            for i in range(row_count):
-                # 格式化原始时间戳
-                formatted_time = ""
-                if i < len(raw_timestamps):
-                    time_str = raw_timestamps[i]
-                    try:
-                        if 'T' in str(time_str):
-                            formatted_time = datetime.fromisoformat(time_str).strftime("%Y-%m-%d %H:%M:%S")
-                        else:
-                            formatted_time = str(time_str)
-                    except (ValueError, TypeError):
-                        formatted_time = str(time_str)
-
-                def _get(lst, idx, default=0.0):
-                    return lst[idx] if idx < len(lst) else default
-
-                cells = [
-                    formatted_time,
-                    f"{_get(timestamps, i):.2f}",
-                    f"{_get(temperatures, i):.2f}",
-                    f"{_get(weights, i):.4f}",
-                    f"{_get(weight_losses, i):.2f}",
-                    f"{_get(co_flows, i):.2f}",
-                    f"{_get(co2_flows, i):.2f}",
-                    f"{_get(n2_flows, i):.2f}",
-                    f"{_get(h2_flows, i):.2f}",
-                ]
-
-                for col, text in enumerate(cells):
-                    table_item = QTableWidgetItem(text)
-                    table_item.setFlags(table_item.flags() & ~Qt.ItemIsEditable)
-                    self.data_table.setItem(i, col, table_item)
-
-            self.data_table.resizeColumnsToContents()
-            self.logger.debug(f"已更新数据表格，共 {row_count} 行数据")
+            self.history_data_model.set_experiment(experiment, timestamps)
+            self.logger.debug(
+                f"已更新数据表格，共 {self.history_data_model.rowCount()} 行数据"
+            )
 
         except Exception as e:
             self.logger.error(f"更新数据表格失败: {e}")
