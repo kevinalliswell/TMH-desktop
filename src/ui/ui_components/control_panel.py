@@ -22,6 +22,8 @@ class ControlPanel(QFrame):
     save_data = Signal()  # 保存数据信号
     reset_experiment = Signal()  # 实验重置信号
 
+    FLOW_SETPOINT_TITLE = "设定气氛流量 SV (L/min)"
+
     def __init__(self, parent=None, gas_safety_limits=None):
         super().__init__(parent)
         self.setFrameStyle(QFrame.NoFrame)  # 移除边框
@@ -61,7 +63,7 @@ class ControlPanel(QFrame):
         atmosphere_layout.setSpacing(8)  # 减少间距
         
         # 添加标题
-        atmosphere_layout.addWidget(QLabel("设定气氛流量 (L/min)"))
+        atmosphere_layout.addWidget(QLabel(self.FLOW_SETPOINT_TITLE))
         
         # 创建4种气体的控制行，包含不同的调节范围
         gases = [
