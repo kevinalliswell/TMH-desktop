@@ -661,18 +661,52 @@ class HistoryQuery(QWidget):
 
     def _analyze_reducibility_data(self, experiment_id: str, experiment_name: str, data_points: list):
         """分析还原性实验数据"""
-        oxygen_content, ok = QInputDialog.getDouble(self, "输入参数 - 还原性分析", f"请输入实验 '{experiment_name}' 的样品氧含量 (%):", 28.5, 0.01, 100.0, 2)
-        if not ok:
-            self.logger.info(f"用户取消为实验 {experiment_id} 输入氧含量。")
+        try:
+            initial_sample_weight = float(self.current_experiment.get("sample_weight"))
+        except (TypeError, ValueError):
+            initial_sample_weight = 0.0
+        if initial_sample_weight <= 0:
+            QMessageBox.critical(self, "参数错误", "实验记录中的初始样重无效，无法计算还原度。")
             return
 
-        self.logger.info(f"用户为实验 {experiment_id} 输入氧含量: {oxygen_content}% ")
+        total_iron_content, ok = QInputDialog.getDouble(
+            self,
+            "输入参数 - 还原性分析",
+            f"请输入实验 '{experiment_name}' 的全铁含量 w(TFe) (%):",
+            60.0,
+            0.01,
+            100.0,
+            2,
+        )
+        if not ok:
+            self.logger.info(f"用户取消为实验 {experiment_id} 输入全铁含量。")
+            return
+
+        feo_content, ok = QInputDialog.getDouble(
+            self,
+            "输入参数 - 还原性分析",
+            f"请输入实验 '{experiment_name}' 的 FeO 含量 (%):",
+            0.0,
+            0.0,
+            100.0,
+            2,
+        )
+        if not ok:
+            self.logger.info(f"用户取消为实验 {experiment_id} 输入FeO含量。")
+            return
+
+        self.logger.info(
+            f"用户为实验 {experiment_id} 输入化学成分: "
+            f"TFe={total_iron_content}%, FeO={feo_content}%"
+        )
 
         try:
             calculator = ReductionCalculator()
             analysis_results = calculator.analyze_experiment_data(
-                data=data_points, 
-                oxygen_content=oxygen_content # Calculator expects percentage
+                data=data_points,
+                total_iron_content=total_iron_content,
+                feo_content=feo_content,
+                initial_sample_weight=initial_sample_weight,
             )
 
             if not analysis_results:
