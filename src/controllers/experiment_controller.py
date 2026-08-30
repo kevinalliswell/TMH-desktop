@@ -129,6 +129,20 @@ class ExperimentController(QObject):
     def set_data_handler(self, data_handler):
         """设置数据处理器"""
         self.data_handler = data_handler
+
+    def _get_registered_device(self, name: str):
+        """从设备注册表获取设备，并兼容尚未迁移的测试替身。"""
+        if not self.device_manager:
+            return None
+        getter = getattr(self.device_manager, "get_device", None)
+        if callable(getter):
+            return getter(name)
+        legacy_attributes = {
+            "MFC": "multi_mfc",
+            "Balance": "balance",
+            "Temp": "temp",
+        }
+        return getattr(self.device_manager, legacy_attributes[name], None)
     
     def _init_timers(self) -> None:
         """初始化定时器"""
@@ -340,30 +354,24 @@ class ExperimentController(QObject):
         
         try:
             # 检查MFC设备
-            if (hasattr(self.device_manager, 'multi_mfc') and 
-                self.device_manager.multi_mfc and 
-                hasattr(self.device_manager.multi_mfc, 'serial_port_available') and
-                self.device_manager.multi_mfc.serial_port_available):
+            mfc_device = self._get_registered_device("MFC")
+            if mfc_device and getattr(mfc_device, 'serial_port_available', False):
                 status['has_mfc'] = True
                 status['available_devices'].append('质量流量计')
             else:
                 status['missing_devices'].append('质量流量计')
             
             # 检查天平设备
-            if (hasattr(self.device_manager, 'balance') and 
-                self.device_manager.balance and 
-                hasattr(self.device_manager.balance, 'serial_port_available') and
-                self.device_manager.balance.serial_port_available):
+            balance_device = self._get_registered_device("Balance")
+            if balance_device and getattr(balance_device, 'serial_port_available', False):
                 status['has_balance'] = True
                 status['available_devices'].append('电子天平')
             else:
                 status['missing_devices'].append('电子天平')
             
             # 检查温控设备
-            if (hasattr(self.device_manager, 'temp') and 
-                self.device_manager.temp and 
-                hasattr(self.device_manager.temp, 'serial_port_available') and
-                self.device_manager.temp.serial_port_available):
+            temp_device = self._get_registered_device("Temp")
+            if temp_device and getattr(temp_device, 'serial_port_available', False):
                 status['has_temperature'] = True
                 status['available_devices'].append('温度控制器')
             else:
@@ -853,9 +861,10 @@ class ExperimentController(QObject):
             
             # 第二步：获取当前天平读数（去皮后应该接近0）
             current_balance_weight = 0.0
-            if self.device_manager and hasattr(self.device_manager, 'balance'):
+            balance_device = self._get_registered_device("Balance")
+            if balance_device:
                 try:
-                    current_balance_weight = self.device_manager.balance.get_current_weight() or 0.0
+                    current_balance_weight = balance_device.get_current_weight() or 0.0
                 except Exception as e:
                     self.logger.warning(f"获取天平读数失败: {str(e)}")
                     current_balance_weight = 0.0
