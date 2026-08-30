@@ -130,6 +130,15 @@ class ExperimentRuntime(QObject):
     def stop_experiment(self) -> bool:
         return self._require_controller().stop_experiment()
 
+    def get_stage_realignment_context(self):
+        return self._require_controller().get_stage_realignment_context()
+
+    def skip_to_next_stage(self) -> bool:
+        return self._require_controller().skip_to_next_stage()
+
+    def adjust_current_stage_elapsed(self, elapsed_minutes: float) -> bool:
+        return self._require_controller().adjust_current_stage_elapsed(elapsed_minutes)
+
     def control_gas_flow(self, gas_name: str, flow_value: float) -> bool:
         return self._require_controller().control_gas_flow(gas_name, flow_value)
 
