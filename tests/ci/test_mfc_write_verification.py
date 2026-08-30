@@ -64,6 +64,7 @@ def client_factory(monkeypatch) -> Iterator:
 
     def make(responses: list[bytes]) -> MultiMFCClient:
         client = MultiMFCClient(_config())
+        client.WRITE_COMMAND_TIMEOUT = 0.1
         client.serial_port = _FakeSerial(responses)
         client.serial_port_available = True
         client._start_command_processor()

@@ -102,7 +102,7 @@ def test_mfc(port: str, baud: int, parity: str, addresses: dict, scaling: dict) 
                 ser.write(cmd)
                 time.sleep(0.05)
                 resp = _read_until(ser, b"\r\n", 64, 1.0)
-                val = cpl.parse_response(resp) if resp else None
+                val = cpl.parse_response(resp, expected_slave=slave) if resp else None
                 scaled = round(val * scaling.get(gas, 0.1), 2) if val is not None else None
                 results[label] = scaled
                 time.sleep(0.05)
