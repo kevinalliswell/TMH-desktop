@@ -26,8 +26,8 @@ class ExperimentDetailDTO(ExperimentSummaryDTO):
     analysis_results: dict[str, Any] | None = None
     timestamps: list[str] = field(default_factory=list)
     temperatures: list[float] = field(default_factory=list)
-    weights: list[float] = field(default_factory=list)
-    weight_losses: list[float] = field(default_factory=list)
+    weights: list[float | None] = field(default_factory=list)
+    weight_losses: list[float | None] = field(default_factory=list)
     gas_flows: dict[str, list[float]] = field(
         default_factory=lambda: {"CO": [], "CO2": [], "N2": [], "H2": []}
     )

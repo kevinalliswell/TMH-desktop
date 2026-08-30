@@ -129,7 +129,10 @@ class ReportExportService:
             handle.write("时间\t温度(℃)\t重量(g)\t失重(%)\tCO(L/min)\tCO₂(L/min)\tN₂(L/min)\tH₂(L/min)\n")
             for row in self._iter_series_rows(detail):
                 handle.write(
-                    f"{row[0]}\t{row[1]:.1f}\t{row[2]:.4f}\t{row[3]:.2f}\t{row[4]:.2f}\t{row[5]:.2f}\t{row[6]:.2f}\t{row[7]:.2f}\n"
+                    f"{row[0]}\t{row[1]:.1f}\t"
+                    f"{self._format_series_value(row[2], 4)}\t"
+                    f"{self._format_series_value(row[3], 2)}\t"
+                    f"{row[4]:.2f}\t{row[5]:.2f}\t{row[6]:.2f}\t{row[7]:.2f}\n"
                 )
 
     def _export_xlsx(self, detail: ExperimentDetailDTO, path: Path) -> None:
@@ -418,8 +421,13 @@ class ReportExportService:
     def _get_val(data_dict, key, default=""):
         if not isinstance(data_dict, dict):
             return default
-        return data_dict.get(key, default)
+        value = data_dict.get(key, default)
+        return default if value is None else value
 
     @staticmethod
     def _get_value(items: list[float], index: int, default: float = 0.0) -> float:
         return items[index] if index < len(items) else default
+
+    @staticmethod
+    def _format_series_value(value: float | None, decimals: int) -> str:
+        return "无效" if value is None else f"{value:.{decimals}f}"
