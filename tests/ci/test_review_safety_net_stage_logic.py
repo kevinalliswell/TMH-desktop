@@ -52,7 +52,6 @@ def test_reducing_stage_advancement_baseline():
     assert mgr.can_advance_stage(880.0, 180 * 60) is False  # out of tolerance
 
 
-@pytest.mark.xfail(strict=True, reason="#64: COOLING temp_tolerance=0.0 demands an exact float match at 1 Hz")
 @pytest.mark.parametrize(
     "etype,near_target",
     [
@@ -61,17 +60,23 @@ def test_reducing_stage_advancement_baseline():
         (ExperimentType.FREE_SWELLING, 50.4),
     ],
 )
-def test_cooling_stage_completes_near_target_expected(etype, near_target):
+def test_cooling_stage_completes_near_target(etype, near_target):
     mgr = _manager_at_stage(etype, ExperimentStage.COOLING)
     assert mgr.can_advance_stage(near_target, 3600.0) is True
 
 
-@pytest.mark.xfail(strict=True, reason="#64: built-in COOLING stages ship temp_tolerance=0.0")
-def test_cooling_stages_have_positive_tolerance_expected():
+def test_cooling_stages_have_positive_tolerance():
     mgr = ExperimentModeManager()
     for etype in ALL_STANDARD_TYPES:
         cooling = [s for s in mgr.get_experiment_stages(etype) if s.stage is ExperimentStage.COOLING]
         assert cooling and all(s.temp_tolerance > 0 for s in cooling), etype.name
+
+
+def test_cooling_stage_uses_an_upper_temperature_threshold():
+    mgr = _manager_at_stage(ExperimentType.REDUCIBILITY, ExperimentStage.COOLING)
+
+    assert mgr.can_advance_stage(20.0, 3600.0) is True
+    assert mgr.can_advance_stage(30.1, 3600.0) is False
 
 
 @pytest.mark.xfail(
