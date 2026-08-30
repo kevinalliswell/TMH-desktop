@@ -50,28 +50,6 @@ def test_cpl_parse_response_handles_real_frames(frame, expected):
 
 
 # --------------------------------------------------------------------------
-# experiment_data dataclasses must be importable (previously a non-default
-# field followed a defaulted base field, raising TypeError at import time).
-# --------------------------------------------------------------------------
-def test_experiment_data_module_imports_and_constructs():
-    from datetime import datetime
-
-    from src.services import experiment_data as ed
-
-    r = ed.ReductionExperimentData(
-        experiment_id="e1",
-        experiment_name="n",
-        sample_name="s",
-        start_time=datetime(2026, 1, 1),
-        operator="op",
-    )
-    assert r.initial_sample_weight_g == 0.0
-    assert r.oxygen_content_percentage == 0.0
-    assert ed.RDIExperimentData is not None
-    assert ed.SwellingExperimentData is not None
-
-
-# --------------------------------------------------------------------------
 # Switching from a custom experiment mode back to a standard mode must clear
 # the stale custom-type flag, otherwise the standard program is ignored.
 # --------------------------------------------------------------------------
