@@ -96,7 +96,7 @@ class ExperimentFile:
         import csv
 
         try:
-            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+            with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
 
                 # 写入实验信息

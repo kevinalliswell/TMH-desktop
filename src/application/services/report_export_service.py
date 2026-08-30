@@ -102,7 +102,7 @@ class ReportExportService:
 
     def _export_csv(self, detail: ExperimentDetailDTO, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", newline="", encoding="utf-8") as handle:
+        with path.open("w", newline="", encoding="utf-8-sig") as handle:
             writer = csv.writer(handle)
             writer.writerow(["实验信息"])
             writer.writerow(["实验名称", detail.experiment_name])
