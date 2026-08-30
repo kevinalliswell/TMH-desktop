@@ -7,7 +7,6 @@ import json
 import os
 
 from src.utils.path_manager import PathManager
-from src.services.experiment_modes import ExperimentModeManager
 from src.services.experiment_type_manager import ExperimentTypeManager
 
 
@@ -15,12 +14,13 @@ class ExperimentDialog(QDialog):
     """实验参数设置对话框"""
     exp_config = PathManager.get_config_path('exp_settings.config')
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, experiment_type_manager=None):
         super().__init__(parent)
         self.setWindowTitle("实验参数设置")
         self.setModal(True)  # 设置为模态对话框
-        self.experiment_mode_manager = ExperimentModeManager()
-        self.experiment_type_manager = ExperimentTypeManager()
+        self.experiment_type_manager = (
+            experiment_type_manager or ExperimentTypeManager()
+        )
         self.init_ui()
         self.load_settings()
 

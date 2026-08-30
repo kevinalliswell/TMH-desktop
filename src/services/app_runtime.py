@@ -15,6 +15,8 @@ from src.infrastructure.devices import DeviceHubAdapter, SnapshotCollectorAdapte
 from src.infrastructure.devices.package_gateways import DevicePackageRegistry
 from src.infrastructure.repositories import CommConfigRepository
 from src.services.experiment_runtime import ExperimentRuntime
+from src.services.enhanced_experiment_modes import EnhancedExperimentModeManager
+from src.services.experiment_type_manager import ExperimentTypeManager
 from src.utils.path_manager import PathManager
 
 
@@ -27,6 +29,8 @@ class RuntimeServices:
     data_handler: DataHandler
     snapshot_collector: SnapshotCollectorPort
     experiment_runtime: ExperimentRuntime
+    experiment_mode_manager: EnhancedExperimentModeManager
+    experiment_type_manager: ExperimentTypeManager
     communication_config: CommunicationConfig
     device_backend_sources: dict[str, str]
     device_backend_details: dict[str, dict[str, object]]
@@ -47,6 +51,8 @@ class AppRuntime(QObject):
         device_registrar: Callable[[DeviceManager], None] | None = None,
         comm_config_repository: CommConfigRepositoryPort | None = None,
         device_package_registry: DevicePackageRegistry | None = None,
+        experiment_mode_manager: EnhancedExperimentModeManager | None = None,
+        experiment_type_manager: ExperimentTypeManager | None = None,
     ):
         super().__init__(parent)
         self.logger = logging.getLogger(__name__)
@@ -70,6 +76,13 @@ class AppRuntime(QObject):
         self._device_package_registry = device_package_registry or DevicePackageRegistry()
         self._device_backend_sources = {}
         self._device_backend_details = {}
+        self.experiment_mode_manager = (
+            experiment_mode_manager or EnhancedExperimentModeManager()
+        )
+        self.experiment_type_manager = (
+            experiment_type_manager
+            or ExperimentTypeManager(mode_manager=self.experiment_mode_manager)
+        )
 
     def start(self):
         """初始化并启动后端服务。"""
@@ -95,6 +108,8 @@ class AppRuntime(QObject):
             data_handler=self.data_handler,
             snapshot_collector=self.snapshot_collector,
             experiment_runtime=self.experiment_runtime,
+            experiment_mode_manager=self.experiment_mode_manager,
+            experiment_type_manager=self.experiment_type_manager,
             communication_config=self.communication_config,
             device_backend_sources=dict(self._device_backend_sources),
             device_backend_details=dict(self._device_backend_details),
@@ -186,7 +201,13 @@ class AppRuntime(QObject):
         data_handler: DataHandler,
         parent: QObject,
     ) -> ExperimentRuntime:
-        return ExperimentRuntime(device_manager, data_handler, parent)
+        return ExperimentRuntime(
+            device_manager,
+            data_handler,
+            parent,
+            experiment_mode_manager=self.experiment_mode_manager,
+            experiment_type_manager=self.experiment_type_manager,
+        )
 
     def _register_real_devices(self, device_manager: DeviceManager):
         """注册真实设备"""

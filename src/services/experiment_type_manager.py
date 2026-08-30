@@ -7,11 +7,7 @@
 from enum import Enum
 from typing import Dict, List, Optional, Any, Union
 import logging
-import json
-import os
-from datetime import datetime
 
-from src.utils.path_manager import PathManager
 from src.services.experiment_modes import ExperimentModeManager
 
 
@@ -61,10 +57,10 @@ class ExperimentTypeInfo:
 
 class ExperimentTypeManager:
     """实验类型管理器"""
-    
-    def __init__(self):
+
+    def __init__(self, mode_manager: Optional[ExperimentModeManager] = None):
         self.logger = logging.getLogger(__name__)
-        self.experiment_mode_manager = ExperimentModeManager()
+        self.experiment_mode_manager = mode_manager or ExperimentModeManager()
         
         # 标准实验类型定义
         self._standard_types = self._initialize_standard_types()
@@ -102,30 +98,30 @@ class ExperimentTypeManager:
         }
     
     def _load_custom_types(self):
-        """从配置文件加载自定义实验类型"""
+        """从共享模式管理器加载自定义实验类型。"""
         try:
-            config_path = PathManager.get_config_path("experiment_modes.json")
-            if os.path.exists(config_path):
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                
-                custom_modes = config.get("experiment_modes", {}).get("custom_modes", {})
-                for mode_id, mode_data in custom_modes.items():
-                    if mode_data.get("enabled", True):
-                        type_info = ExperimentTypeInfo(
-                            type_id=mode_id,
-                            name=mode_data.get("name", mode_id),
-                            description=mode_data.get("description", ""),
-                            category=ExperimentTypeCategory.CUSTOM,
-                            enabled=mode_data.get("enabled", True),
-                            created_by=mode_data.get("created_by", "unknown"),
-                            created_time=mode_data.get("created_time", ""),
-                            stages=mode_data.get("stages", [])
-                        )
-                        self._custom_types[mode_id] = type_info
-                        
+            self._custom_types.clear()
+            custom_modes = self.experiment_mode_manager.get_custom_modes()
+            for mode_id, mode_data in custom_modes.items():
+                if mode_data.get("enabled", True):
+                    type_info = ExperimentTypeInfo(
+                        type_id=mode_id,
+                        name=mode_data.get("name", mode_id),
+                        description=mode_data.get("description", ""),
+                        category=ExperimentTypeCategory.CUSTOM,
+                        enabled=mode_data.get("enabled", True),
+                        created_by=mode_data.get("created_by", "unknown"),
+                        created_time=mode_data.get("created_time", ""),
+                        stages=mode_data.get("stages", [])
+                    )
+                    self._custom_types[mode_id] = type_info
+
         except Exception as e:
             self.logger.error(f"加载自定义实验类型失败: {str(e)}")
+
+    def reload_custom_types(self) -> None:
+        """Refresh the type index from the shared mode manager."""
+        self._load_custom_types()
     
     def get_all_types(self) -> Dict[str, ExperimentTypeInfo]:
         """获取所有实验类型"""
@@ -216,9 +212,13 @@ class ExperimentTypeManager:
     def add_custom_type(self, type_info: ExperimentTypeInfo) -> bool:
         """添加自定义实验类型"""
         try:
-            self._custom_types[type_info.type_id] = type_info
-            self._save_custom_types()
-            return True
+            result = self.experiment_mode_manager.add_custom_mode(
+                type_info.type_id,
+                type_info.to_dict(),
+            )
+            if result:
+                self.reload_custom_types()
+            return result
         except Exception as e:
             self.logger.error(f"添加自定义实验类型失败: {str(e)}")
             return False
@@ -226,11 +226,10 @@ class ExperimentTypeManager:
     def remove_custom_type(self, type_id: str) -> bool:
         """删除自定义实验类型"""
         try:
-            if type_id in self._custom_types:
-                del self._custom_types[type_id]
-                self._save_custom_types()
-                return True
-            return False
+            result = self.experiment_mode_manager.delete_custom_mode(type_id)
+            if result:
+                self.reload_custom_types()
+            return result
         except Exception as e:
             self.logger.error(f"删除自定义实验类型失败: {str(e)}")
             return False
@@ -238,45 +237,16 @@ class ExperimentTypeManager:
     def update_custom_type(self, type_id: str, type_info: ExperimentTypeInfo) -> bool:
         """更新自定义实验类型"""
         try:
-            if type_id in self._custom_types:
-                self._custom_types[type_id] = type_info
-                self._save_custom_types()
-                return True
-            return False
+            result = self.experiment_mode_manager.update_custom_mode(
+                type_id,
+                type_info.to_dict(),
+            )
+            if result:
+                self.reload_custom_types()
+            return result
         except Exception as e:
             self.logger.error(f"更新自定义实验类型失败: {str(e)}")
             return False
-    
-    def _save_custom_types(self):
-        """保存自定义实验类型到配置文件"""
-        try:
-            config_path = PathManager.get_config_path("experiment_modes.json")
-            
-            # 读取现有配置
-            config = {}
-            if os.path.exists(config_path):
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-            
-            # 确保结构存在
-            if "experiment_modes" not in config:
-                config["experiment_modes"] = {}
-            if "custom_modes" not in config["experiment_modes"]:
-                config["experiment_modes"]["custom_modes"] = {}
-            
-            # 更新自定义模式
-            custom_modes = {}
-            for type_id, type_info in self._custom_types.items():
-                custom_modes[type_id] = type_info.to_dict()
-            
-            config["experiment_modes"]["custom_modes"] = custom_modes
-            
-            # 保存配置
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
-                
-        except Exception as e:
-            self.logger.error(f"保存自定义实验类型失败: {str(e)}")
     
     def get_type_display_list(self) -> List[tuple]:
         """
@@ -338,7 +308,7 @@ class ExperimentTypeManager:
         gas = getattr(stage, "gas_settings", None)
         stage_enum = getattr(stage, "stage", None)
         return {
-            "stage_name": getattr(stage_enum, "value", stage_enum),
+            "stage_name": getattr(stage_enum, "name", stage_enum),
             "description": getattr(stage, "description", ""),
             "target_temp": getattr(stage, "target_temp", None),
             "temp_tolerance": getattr(stage, "temp_tolerance", None),
