@@ -211,12 +211,18 @@ class ReportExportService:
         plus_3_15 = self._get_val(sieve_inputs, "mass_gt_6_3", 0.0) + self._get_val(sieve_inputs, "mass_3_15_to_6_3", 0.0)
         minus_3_15 = self._get_val(sieve_inputs, "mass_0_5_to_3_15", 0.0)
         minus_0_5 = self._get_val(sieve_inputs, "mass_lt_0_5", 0.0)
-        rdi_3_15 = self._get_val(rdi_indices, "RDI+3.15", 72.0)
-        rdi_0_5 = self._get_val(rdi_indices, "RDI-0.5", 8.0)
+        rdi_minus_3_15 = self._percentage_or_none(rdi_indices.get("RDI-3.15"))
+        if rdi_minus_3_15 is None:
+            rdi_plus_3_15 = self._percentage_or_none(rdi_indices.get("RDI+3.15"))
+            if rdi_plus_3_15 is not None:
+                rdi_minus_3_15 = 100.0 - rdi_plus_3_15
+        rdi_0_5 = self._percentage_or_none(rdi_indices.get("RDI-0.5"))
+        rdi_minus_3_15_text = self._format_optional_number(rdi_minus_3_15)
+        rdi_0_5_text = self._format_optional_number(rdi_0_5)
 
         results_html = (f"<tr><td>1</td><td>{init_mass:.2f}</td><td>{plus_3_15:.2f}</td>"
                         f"<td>{minus_3_15:.2f}</td><td>{minus_0_5:.2f}</td>"
-                        f"<td>{rdi_3_15:.2f}</td><td>{rdi_0_5:.2f}</td></tr>\n")
+                        f"<td>{rdi_minus_3_15_text}</td><td>{rdi_0_5_text}</td></tr>\n")
         report = report.replace(
             "{% for item in test_results %}\n            <tr>\n                <td>{{ loop.index }}</td>\n"
             "                <td>{{ item.mass_before }}</td>\n                <td>{{ item.mass_plus_3_15 }}</td>\n"
@@ -225,14 +231,24 @@ class ReportExportService:
             "            </tr>\n            {% endfor %}",
             results_html,
         )
-        report = report.replace("{{ avg_results.rdi_minus_3_15 }}", f"{rdi_3_15:.2f}")
-        report = report.replace("{{ avg_results.rdi_minus_0_5 }}", f"{rdi_0_5:.2f}")
+        report = report.replace("{{ avg_results.rdi_minus_3_15 }}", rdi_minus_3_15_text)
+        report = report.replace("{{ avg_results.rdi_minus_0_5 }}", rdi_0_5_text)
+        rdi_minus_summary = (
+            "RDI-3.15未测得"
+            if rdi_minus_3_15 is None
+            else f"RDI-3.15为{rdi_minus_3_15_text}%"
+        )
+        rdi_0_5_summary = (
+            "RDI-0.5未测得"
+            if rdi_0_5 is None
+            else f"RDI-0.5为{rdi_0_5_text}%"
+        )
         report = report.replace(
             "{{ conclusion }}",
             self._get_val(
                 analysis,
                 "conclusion",
-                f"根据GB/T 13242-2017标准，该铁矿石样品的低温还原粉化指数RDI-3.15为{rdi_3_15:.2f}%，RDI-0.5为{rdi_0_5:.2f}%。",
+                f"根据GB/T 13242-2017标准，该铁矿石样品的低温还原粉化指数{rdi_minus_summary}，{rdi_0_5_summary}。",
             ),
         )
         return self._fill_report_footer(report, detail, self._test_date(detail))
@@ -419,6 +435,18 @@ class ReportExportService:
         if not isinstance(data_dict, dict):
             return default
         return data_dict.get(key, default)
+
+    @staticmethod
+    def _percentage_or_none(value) -> float | None:
+        try:
+            percentage = float(value)
+        except (TypeError, ValueError):
+            return None
+        return percentage if 0.0 <= percentage <= 100.0 else None
+
+    @staticmethod
+    def _format_optional_number(value: float | None) -> str:
+        return "未测得" if value is None else f"{value:.2f}"
 
     @staticmethod
     def _get_value(items: list[float], index: int, default: float = 0.0) -> float:

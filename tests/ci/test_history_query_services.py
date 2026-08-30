@@ -100,4 +100,5 @@ def test_report_export_service_writes_csv_and_html_report(tmp_path):
     assert html_path.exists()
     html_content = html_path.read_text(encoding="utf-8")
     assert "Ore A" in html_content
-    assert "72.00" in html_content
+    assert "28.00" in html_content
+    assert "72.00" not in html_content
