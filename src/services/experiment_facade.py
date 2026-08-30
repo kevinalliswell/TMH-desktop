@@ -26,6 +26,10 @@ class ExperimentFacade:
         return self._runtime.experiment_stopped
 
     @property
+    def experiment_completed(self):
+        return self._runtime.experiment_completed
+
+    @property
     def experiment_time_updated(self):
         return self._runtime.experiment_time_updated
 
@@ -47,8 +51,17 @@ class ExperimentFacade:
     # 保留旧 API 别名
     ensure_ready = ensure_controller
 
-    def connect_signals(self, status_cb, system_cb, started_cb, stopped_cb, time_cb, stage_cb,
-                         state_changed_cb=None):
+    def connect_signals(
+        self,
+        status_cb,
+        system_cb,
+        started_cb,
+        stopped_cb,
+        time_cb,
+        stage_cb,
+        state_changed_cb=None,
+        completed_cb=None,
+    ):
         """连接信号并记录连接，以便 cleanup 时断开"""
         pairs = [
             (self._runtime.status_updated, status_cb),
@@ -60,6 +73,8 @@ class ExperimentFacade:
         ]
         if state_changed_cb is not None:
             pairs.append((self._runtime.state_changed, state_changed_cb))
+        if completed_cb is not None:
+            pairs.append((self._runtime.experiment_completed, completed_cb))
         for signal, slot in pairs:
             signal.connect(slot)
             self._signal_connections.append((signal, slot))

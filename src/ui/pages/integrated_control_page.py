@@ -343,8 +343,6 @@ class IntegratedControlPage(QWidget):
         """
         self.logger.info("执行实验结束清理")
         self.experiment_status.clear_experiment_info()
-        if self.data_handler:
-            self.data_handler.stop_save_db_thread()
         if self.chart_tabs:
             self.chart_tabs.disable_table_data_writing()
         # 重置状态跟踪文本
@@ -537,8 +535,6 @@ class IntegratedControlPage(QWidget):
 
     def begin_experiment_session(self, experiment_data, experiment_file_path, experiment_params: dict) -> None:
         """Apply UI-side effects after a successful experiment startup."""
-        if self.data_handler:
-            self.data_handler.start_save_db_thread()
         if self.chart_tabs:
             self.chart_tabs.enable_table_data_writing()
             experiment_info = self._format_experiment_data_to_info(experiment_data)
