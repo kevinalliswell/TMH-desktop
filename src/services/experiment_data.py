@@ -32,9 +32,7 @@ class ReductionExperimentData(BaseExperimentData):
     # NOTE: dataclass inheritance requires these to carry defaults because the
     # base class (BaseExperimentData) already declares fields with defaults.
     initial_sample_weight_g: float = 0.0 # 样品初始重量 (克)
-    total_iron_content_percentage: float = 0.0 # 全铁含量 w(TFe) (%)
-    feo_content_percentage: float = 0.0 # 氧化亚铁含量 w(FeO) (%)
-    oxygen_content_percentage: float = 0.0 # 旧实验文件兼容字段，不再用于 GB/T 13241 计算
+    oxygen_content_percentage: float = 0.0 # 样品中总铁对应的氧含量或实验中用于计算失氧量的氧含量 (%)
 
     # 实验过程中记录的关键数据序列 (可选，也可以从raw_data_log中提取)
     timestamps: List[datetime] = field(default_factory=list)

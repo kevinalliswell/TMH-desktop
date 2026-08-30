@@ -67,8 +67,7 @@ def test_experiment_data_module_imports_and_constructs():
         operator="op",
     )
     assert r.initial_sample_weight_g == 0.0
-    assert r.total_iron_content_percentage == 0.0
-    assert r.feo_content_percentage == 0.0
+    assert r.oxygen_content_percentage == 0.0
     assert ed.RDIExperimentData is not None
     assert ed.SwellingExperimentData is not None
 
