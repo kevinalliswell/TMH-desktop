@@ -53,7 +53,7 @@ class TemperatureCommunicationConfig:
     reg_count: int = 9
     temp_channels: list[str] = field(default_factory=list)
     scale: float = 0.1
-    signed_registers: bool = False
+    signed_registers: bool = True
 
 
 @dataclass

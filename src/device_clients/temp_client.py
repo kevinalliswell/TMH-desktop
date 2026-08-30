@@ -178,12 +178,20 @@ class TempClient(BaseDevice):
             )
             if frame is not None:
                 scale = self.port_config.get("scale", 0.1)
-                parsed = self._rtu.parse_read_all(frame, scale=scale)
+                signed_registers = self.port_config.get("signed_registers", True)
+                parsed = self._rtu.parse_read_all(
+                    frame,
+                    scale=scale,
+                    signed_registers=signed_registers,
+                )
                 for point in self.TEMP_POINTS:
                     if point in parsed:
                         result[point] = parsed[point]
                         info = self.TEMP_POINTS[point]
-                        self.logger.debug(f"读取 {info['description']}: {result[point]}{info['unit']}")
+                        if result[point] is None:
+                            self.logger.warning(f"{info['description']}: 传感器故障")
+                        else:
+                            self.logger.debug(f"读取 {info['description']}: {result[point]}{info['unit']}")
 
                 # 更新统计信息
                 self._read_counter += 1
