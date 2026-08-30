@@ -130,17 +130,26 @@ class TempClient(BaseDevice):
                     
                     # 读取响应
                     start_time = time.time()
+                    response = b''
                     while (time.time() - start_time) < self.COMMAND_TIMEOUT:
                         if ser.in_waiting > 0:
-                            response = ser.read(ser.in_waiting)
-                            if response:
-                                # 格式化响应日志
+                            response += ser.read(ser.in_waiting)
+                            if self._rtu.extract_read_all(
+                                response,
+                                slave_address=self.slave_address,
+                            ) is not None:
+                                # 格式化完整响应日志
                                 resp_hex = self._format_command_hex(response)
                                 self.logger.debug(f"收到响应: {resp_hex}")
                                 return response
                         time.sleep(0.01)
-                    
-                    self.logger.warning(f"命令超时 (尝试 {attempt+1}/{retries})")
+
+                    if response:
+                        self.logger.warning(
+                            f"收到不完整温控响应，丢弃并重试: {response.hex(' ')}"
+                        )
+                    else:
+                        self.logger.warning(f"命令超时 (尝试 {attempt+1}/{retries})")
             except Exception as e:
                 self.logger.error(f"发送命令异常: {e}")
             
