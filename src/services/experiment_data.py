@@ -61,7 +61,6 @@ class RDIExperimentData(BaseExperimentData):
     """
     # 实验特定输入参数
     initial_sample_mass_g: float = 0.0 # 还原前试样总质量 (克)
-    drum_sample_mass_g: float = 0.0 # 还原后装入转鼓的试样质量 m0 (克)
 
     # 实验结束后测量的各粒级筛分质量
     sieve_data_g: Dict[str, float] = field(default_factory=dict)
