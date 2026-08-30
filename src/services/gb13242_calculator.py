@@ -24,6 +24,7 @@ class LowTempDegradationCalculator:
         指标说明：
         - RDI+6.3: >6.3mm颗粒重量百分比
         - RDI+3.15: >3.15mm颗粒重量百分比
+        - RDI-3.15: <3.15mm颗粒重量百分比
         - RDI-0.5: <0.5mm颗粒重量百分比
         """
         try:
@@ -33,11 +34,13 @@ class LowTempDegradationCalculator:
             # 计算各指标
             weight_above_6_3 = sum(w for size, w in sieve_weights.items() if size > 6.3)
             weight_above_3_15 = sum(w for size, w in sieve_weights.items() if size > 3.15)
+            weight_below_3_15 = sum(w for size, w in sieve_weights.items() if size < 3.15)
             weight_below_0_5 = sum(w for size, w in sieve_weights.items() if size < 0.5)
             
             rdi = {
                 'RDI+6.3': round(weight_above_6_3 / initial_weight * 100, 2),
                 'RDI+3.15': round(weight_above_3_15 / initial_weight * 100, 2),
+                'RDI-3.15': round(weight_below_3_15 / initial_weight * 100, 2),
                 'RDI-0.5': round(weight_below_0_5 / initial_weight * 100, 2)
             }
             
@@ -118,4 +121,4 @@ class LowTempDegradationCalculator:
             self.logger.error(f"验证实验条件失败: {str(e)}")
             problems.append(f"数据验证过程出错: {str(e)}")
             
-        return problems 
+        return problems

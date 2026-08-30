@@ -9,6 +9,7 @@ import pytest
 
 from src.application.dto import ExperimentDetailDTO
 from src.application.services.report_export_service import ReportExportService
+from src.services.gb13242_calculator import LowTempDegradationCalculator
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -36,8 +37,7 @@ def _detail(**overrides):
     return ExperimentDetailDTO(**kwargs)
 
 
-@pytest.mark.xfail(strict=True, reason="#74: the RDI+3.15 value is printed under the RDI-3.15 label")
-def test_rdi_report_conclusion_uses_minus_3_15_expected(service):
+def test_rdi_report_conclusion_uses_minus_3_15(service):
     detail = _detail(
         experiment_type="GB/T 13242",
         analysis_results={
@@ -46,6 +46,38 @@ def test_rdi_report_conclusion_uses_minus_3_15_expected(service):
     )
     content = service._build_rdi_report(detail)
     assert "RDI-3.15为28.00%" in content
+    assert "RDI-3.15为72.00%" not in content
+
+
+def test_rdi_calculator_returns_minus_3_15():
+    result = LowTempDegradationCalculator().calculate_rdi(
+        100.0,
+        {6.301: 60.0, 3.151: 12.0, 0.501: 20.0, 0.499: 8.0},
+    )
+
+    assert result["RDI+3.15"] == 72.0
+    assert result["RDI-3.15"] == 28.0
+    assert result["RDI-0.5"] == 8.0
+
+
+def test_rdi_report_derives_minus_3_15_for_legacy_results(service):
+    detail = _detail(
+        experiment_type="GB/T 13242",
+        analysis_results={"calculated_rdi_indices": {"RDI+3.15": 72.0, "RDI-0.5": 8.0}},
+    )
+
+    content = service._build_rdi_report(detail)
+
+    assert "RDI-3.15为28.00%" in content
+
+
+def test_rdi_report_marks_missing_indices_as_unmeasured(service):
+    content = service._build_rdi_report(
+        _detail(experiment_type="GB/T 13242", analysis_results={})
+    )
+
+    assert "RDI-3.15未测得" in content
+    assert "RDI-0.5未测得" in content
     assert "RDI-3.15为72.00%" not in content
 
 
