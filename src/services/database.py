@@ -111,8 +111,8 @@ class ExperimentDatabase:
                     timestamp TEXT NOT NULL,
                     experiment_duration TEXT,
                     temperature REAL NOT NULL,
-                    weight REAL NOT NULL,
-                    weight_loss REAL NOT NULL,
+                    weight REAL,
+                    weight_loss REAL,
                     co_flow REAL NOT NULL,
                     co2_flow REAL NOT NULL,
                     n2_flow REAL NOT NULL,
@@ -147,6 +147,17 @@ class ExperimentDatabase:
                         "ADD COLUMN data_quality TEXT NOT NULL DEFAULT '{}';"
                     )
                     logger.info("Added 'data_quality' column to 'experiment_data' table.")
+
+                cursor.execute("PRAGMA table_info(experiment_data);")
+                column_constraints = {
+                    info[1]: bool(info[3])
+                    for info in cursor.fetchall()
+                }
+                if (
+                    column_constraints.get('weight')
+                    or column_constraints.get('weight_loss')
+                ):
+                    self._make_weight_columns_nullable(cursor)
                     
             except sqlite3.Error as e:
                 logger.error(f"Error checking/adding new columns to 'experiment_data' table: {e}")
@@ -161,6 +172,45 @@ class ExperimentDatabase:
                 CREATE INDEX IF NOT EXISTS idx_experiment_data_timestamp
                 ON experiment_data(experiment_id, timestamp)
             """)
+
+    @staticmethod
+    def _make_weight_columns_nullable(cursor):
+        """Rebuild the SQLite table so unavailable balance values can be NULL."""
+        legacy_table = "experiment_data_not_null_weights"
+        cursor.execute(f"ALTER TABLE experiment_data RENAME TO {legacy_table}")
+        cursor.execute("""
+            CREATE TABLE experiment_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                experiment_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                experiment_duration TEXT,
+                temperature REAL NOT NULL,
+                weight REAL,
+                weight_loss REAL,
+                co_flow REAL NOT NULL,
+                co2_flow REAL NOT NULL,
+                n2_flow REAL NOT NULL,
+                h2_flow REAL NOT NULL,
+                experiment_status TEXT,
+                system_message TEXT,
+                data_quality TEXT NOT NULL DEFAULT '{}',
+                FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id)
+            )
+        """)
+        cursor.execute(f"""
+            INSERT INTO experiment_data (
+                id, experiment_id, timestamp, experiment_duration, temperature,
+                weight, weight_loss, co_flow, co2_flow, n2_flow, h2_flow,
+                experiment_status, system_message, data_quality
+            )
+            SELECT
+                id, experiment_id, timestamp, experiment_duration, temperature,
+                weight, weight_loss, co_flow, co2_flow, n2_flow, h2_flow,
+                experiment_status, system_message, data_quality
+            FROM {legacy_table}
+        """)
+        cursor.execute(f"DROP TABLE {legacy_table}")
+        logger.info("Made experiment_data weight columns nullable.")
 
     def create_experiment(self, data: ExperimentData) -> bool:
         """创建实验记录"""
@@ -337,8 +387,8 @@ class ExperimentDatabase:
                     data_point['timestamp'] = row[column_mapping.get('timestamp', 2)] if len(row) > column_mapping.get('timestamp', 2) else ''
                     data_point['experiment_duration'] = row[column_mapping.get('experiment_duration', 3)] if len(row) > column_mapping.get('experiment_duration', 3) else ''
                     data_point['temperature'] = float(row[column_mapping.get('temperature', 4)]) if len(row) > column_mapping.get('temperature', 4) and row[column_mapping.get('temperature', 4)] is not None else 0.0
-                    data_point['weight'] = float(row[column_mapping.get('weight', 5)]) if len(row) > column_mapping.get('weight', 5) and row[column_mapping.get('weight', 5)] is not None else 0.0
-                    data_point['weight_loss'] = float(row[column_mapping.get('weight_loss', 6)]) if len(row) > column_mapping.get('weight_loss', 6) and row[column_mapping.get('weight_loss', 6)] is not None else 0.0
+                    data_point['weight'] = float(row[column_mapping.get('weight', 5)]) if len(row) > column_mapping.get('weight', 5) and row[column_mapping.get('weight', 5)] is not None else None
+                    data_point['weight_loss'] = float(row[column_mapping.get('weight_loss', 6)]) if len(row) > column_mapping.get('weight_loss', 6) and row[column_mapping.get('weight_loss', 6)] is not None else None
                     data_point['co_flow'] = float(row[column_mapping.get('co_flow', 7)]) if len(row) > column_mapping.get('co_flow', 7) and row[column_mapping.get('co_flow', 7)] is not None else 0.0
                     data_point['co2_flow'] = float(row[column_mapping.get('co2_flow', 8)]) if len(row) > column_mapping.get('co2_flow', 8) and row[column_mapping.get('co2_flow', 8)] is not None else 0.0
                     data_point['n2_flow'] = float(row[column_mapping.get('n2_flow', 9)]) if len(row) > column_mapping.get('n2_flow', 9) and row[column_mapping.get('n2_flow', 9)] is not None else 0.0

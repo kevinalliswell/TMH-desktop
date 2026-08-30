@@ -576,10 +576,12 @@ class DataHandler(QObject):
             current_weight, weight_valid = self._coerce_numeric_sample(
                 (weight_data or {}).get("weight")
             )
+            if not weight_valid:
+                current_weight = None
 
             # 计算减重率
-            weight_loss = 0.0
-            if self.initial_weight and self.initial_weight > 0:
+            weight_loss = None
+            if weight_valid and self.initial_weight and self.initial_weight > 0:
                 weight_loss = ((self.initial_weight - current_weight) / self.initial_weight) * 100
             
             # 获取气体流量数据

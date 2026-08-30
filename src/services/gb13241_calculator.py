@@ -1,4 +1,5 @@
 ﻿# src/services/gb13241_calculator.py
+import math
 from typing import List, Dict, Optional
 import numpy as np
 import logging
@@ -84,9 +85,22 @@ class ReductionCalculator:
             Dict: 分析结果字典
         """
         try:
-            # 提取重量和时间数据
-            weights = [d['weight'] for d in data]
-            timestamps = [d['timestamp'] for d in data]
+            # 天平掉线的数据点以 NULL 保存；分析只使用有效、有限的重量值。
+            valid_data = []
+            for point in data:
+                try:
+                    weight = float(point.get('weight'))
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(weight):
+                    continue
+                valid_data.append((point.get('timestamp'), weight))
+
+            if not valid_data:
+                return {}
+
+            weights = [weight for _, weight in valid_data]
+            timestamps = [timestamp for timestamp, _ in valid_data]
             
             # 计算时间序列（分钟）
             start_time = timestamps[0]
@@ -100,7 +114,11 @@ class ReductionCalculator:
             ]
             
             # 计算还原速率指数
-            reduction_index = self.calculate_reduction_index(reduction_degrees, times)
+            reduction_index = (
+                self.calculate_reduction_index(reduction_degrees, times)
+                if len(reduction_degrees) >= 2
+                else None
+            )
             
             # 计算最终还原度
             final_reduction_degree = reduction_degrees[-1]
@@ -112,7 +130,7 @@ class ReductionCalculator:
                 'final_reduction_degree': final_reduction_degree,
                 'reduction_index': reduction_index,
                 'experiment_duration': times[-1],
-                'data_points': len(data)
+                'data_points': len(valid_data)
             }
             
         except Exception as e:
@@ -155,4 +173,4 @@ class ReductionCalculator:
             self.logger.error(f"验证实验条件失败: {str(e)}")
             problems.append(f"数据验证过程出错: {str(e)}")
             
-        return problems 
+        return problems

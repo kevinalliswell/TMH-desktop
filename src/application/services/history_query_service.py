@@ -59,10 +59,22 @@ class HistoryQueryService:
             timestamp = point.get("timestamp")
             if not timestamp:
                 continue
+            quality = point.get("data_quality")
+            weight_valid = not (
+                isinstance(quality, dict) and quality.get("weight") is False
+            )
             detail.timestamps.append(timestamp)
             detail.temperatures.append(self._safe_float(point.get("temperature")))
-            detail.weights.append(self._safe_float(point.get("weight")))
-            detail.weight_losses.append(self._safe_float(point.get("weight_loss")))
+            detail.weights.append(
+                self._safe_float(point.get("weight"), default=None)
+                if weight_valid
+                else None
+            )
+            detail.weight_losses.append(
+                self._safe_float(point.get("weight_loss"), default=None)
+                if weight_valid
+                else None
+            )
             detail.gas_flows["CO"].append(self._safe_float(point.get("co_flow")))
             detail.gas_flows["CO2"].append(self._safe_float(point.get("co2_flow")))
             detail.gas_flows["N2"].append(self._safe_float(point.get("n2_flow")))
@@ -118,7 +130,7 @@ class HistoryQueryService:
         return parsed
 
     @staticmethod
-    def _safe_float(value, default: float = 0.0) -> float:
+    def _safe_float(value, default: float | None = 0.0) -> float | None:
         try:
             return float(value) if value is not None else default
         except (TypeError, ValueError):
