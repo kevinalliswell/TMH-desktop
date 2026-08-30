@@ -338,22 +338,47 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
 
-        try:
-            # 结束实验（如有实验在进行，可在此处添加相关逻辑）
-            if hasattr(self, "integrated_control_page") and self.integrated_control_page:
-                try:
-                    if hasattr(self.integrated_control_page, "end_experiment"):
-                        self.integrated_control_page.end_experiment()
-                except Exception as e:
-                    self.logger.error(f"结束实验出错: {e}")
+        if not self._stop_running_experiment_before_close():
+            event.ignore()
+            return
 
-            # 停止运行时服务
+        try:
+            # 安全停机成功后再关闭串口和后台服务。
             if self.runtime:
                 self.runtime.stop()
-
-            # 如有其它需要保存的数据，可在此处添加保存逻辑
-
         except Exception as e:
-            self.logger.error(f"处理关闭事件出错: {e}")
+            self.logger.error(f"停止运行时服务失败: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "退出失败",
+                "后台服务未能安全停止，系统将保持运行。请检查设备状态后重试。",
+            )
+            event.ignore()
+            return
 
         super().closeEvent(event)
+
+    def _stop_running_experiment_before_close(self) -> bool:
+        """Synchronously stop an active experiment before device ports close."""
+        dependencies = getattr(self, "ui_dependencies", None)
+        experiment_api = getattr(dependencies, "experiment_api", None)
+        if experiment_api is None:
+            return True
+
+        try:
+            if not experiment_api.is_experiment_running():
+                return True
+            if experiment_api.stop_experiment():
+                self.logger.info("退出前已停止实验并下发安全气氛")
+                return True
+            error_message = "实验安全停机失败，系统将保持运行。请检查气路与设备连接后重试。"
+        except Exception as e:
+            self.logger.error(f"退出前停止实验出错: {e}", exc_info=True)
+            error_message = (
+                "实验安全停机发生异常，系统将保持运行。"
+                "请检查气路与设备连接后重试。"
+            )
+
+        self.logger.critical(error_message)
+        QMessageBox.critical(self, "无法安全退出", error_message)
+        return False
