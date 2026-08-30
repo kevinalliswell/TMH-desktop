@@ -143,6 +143,8 @@ class IntegratedControlPage(QWidget):
         if self.control_panel and not self._control_panel_signals_connected:
             self.control_panel.start_experiment.connect(self.handle_start_experiment)   # 监听信号，处理开始实验逻辑
             self.control_panel.stop_experiment.connect(self.handle_stop_experiment)   # 监听信号，处理停止实验逻辑
+            self.control_panel.skip_stage.connect(self.handle_skip_stage)
+            self.control_panel.adjust_stage_elapsed.connect(self.handle_adjust_stage_elapsed)
             self.control_panel.gas_flow_set.connect(self.handle_gas_flow_set)   # 监听信号，处理气体流量设置逻辑
             self.control_panel.tare_balance.connect(self.handle_tare_balance)   # 监听信号，处理天平清零逻辑
             self.control_panel.save_data.connect(self.handle_save_data)   # 监听信号，处理保存数据逻辑
@@ -298,6 +300,52 @@ class IntegratedControlPage(QWidget):
         """处理停止实验按钮点击"""
         self.presenter.handle_stop_experiment()
 
+    def handle_skip_stage(self):
+        """将重启后的实验安全校正到下一个配置阶段。"""
+        context = self.experiment_api.get_stage_realignment_context()
+        if context is None:
+            self.show_warning("无法校正阶段", "仅可在实验稳定运行时校正阶段。")
+            return
+        if not context["can_skip"]:
+            self.show_warning(
+                "无法跳过阶段",
+                "当前已是最后阶段。请使用“停止实验”完成数据收尾并切换保护气氛。",
+            )
+            return
+        if not self.experiment_api.skip_to_next_stage():
+            self.show_warning("阶段未变更", "阶段跳转未执行，请查看系统消息和审计日志。")
+
+    def handle_adjust_stage_elapsed(self):
+        """询问并应用固定时长阶段的实际已用时。"""
+        context = self.experiment_api.get_stage_realignment_context()
+        if context is None:
+            self.show_warning("无法校正时长", "仅可在实验稳定运行时校正阶段时长。")
+            return
+        if not context["can_adjust_elapsed"]:
+            self.show_warning(
+                "无法校正时长",
+                "当前阶段由温度条件驱动。请在核对现场状态后使用“跳到下一阶段”。",
+            )
+            return
+
+        duration = context["duration_minutes"]
+        current_elapsed = min(context["elapsed_minutes"], duration)
+        elapsed_minutes, accepted = QInputDialog.getDouble(
+            self,
+            "校正阶段时长",
+            (
+                f"第 {context['current_stage_index']}/{context['total_stages']} 阶段："
+                f"{context['stage_description']}\n"
+                "请输入现场确认的阶段已用时（分钟）："
+            ),
+            current_elapsed,
+            0.0,
+            duration,
+            1,
+        )
+        if accepted and not self.experiment_api.adjust_current_stage_elapsed(elapsed_minutes):
+            self.show_warning("时长未变更", "阶段时长校正未执行，请查看系统消息和审计日志。")
+
     def _on_state_changed(self, state):
         """
         集中式状态驱动 UI 更新。
@@ -308,6 +356,7 @@ class IntegratedControlPage(QWidget):
         """
         is_running = state.is_running
         is_idle = state.phase == ExperimentPhase.IDLE
+        can_realign_stage = state.phase == ExperimentPhase.RUNNING
 
         # 跟踪是否曾处于活跃状态（用于区分初始 IDLE 和实验结束后的 IDLE）
         if state.is_active:
@@ -316,6 +365,8 @@ class IntegratedControlPage(QWidget):
         # 按钮状态：从实验阶段派生
         self.control_panel.start_btn.setEnabled(is_idle)
         self.control_panel.stop_btn.setEnabled(is_running)
+        self.control_panel.skip_stage_btn.setEnabled(can_realign_stage)
+        self.control_panel.adjust_stage_elapsed_btn.setEnabled(can_realign_stage)
 
         # 实验状态文本
         phase_text_map = {

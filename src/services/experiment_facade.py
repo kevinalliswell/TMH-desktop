@@ -65,6 +65,15 @@ class ExperimentFacade:
     def stop_experiment(self) -> bool:
         return self._runtime.stop_experiment()
 
+    def get_stage_realignment_context(self):
+        return self._runtime.get_stage_realignment_context()
+
+    def skip_to_next_stage(self) -> bool:
+        return self._runtime.skip_to_next_stage()
+
+    def adjust_current_stage_elapsed(self, elapsed_minutes: float) -> bool:
+        return self._runtime.adjust_current_stage_elapsed(elapsed_minutes)
+
     def control_gas_flow(self, gas_name: str, flow_value: float) -> bool:
         return self._runtime.control_gas_flow(gas_name, flow_value)
 
