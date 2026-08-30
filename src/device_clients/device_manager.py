@@ -17,6 +17,9 @@ from tmh_comm.standard import (
 import json
 
 class DeviceManager:
+    _MIN_DATA_FRESHNESS_SECONDS = 5.0
+    _DATA_FRESHNESS_INTERVALS = 5.0
+
     def __init__(self, config_path: str | None = None):
         if config_path is None:
             config_path = PathManager.get_config_path('comm_config.json')
@@ -487,6 +490,12 @@ class DeviceManager:
                 recent_data = None
 
             if recent_data is not None:
+                if not self._has_fresh_device_data(device, recent_data):
+                    return {
+                        'connected': False,
+                        'name': device_name,
+                        'error': f"{device_name}: 通信超时或无新数据"
+                    }
                 if data_validator(recent_data):
                     return {
                         'connected': True,
@@ -510,6 +519,46 @@ class DeviceManager:
                 'name': device_name,
                 'error': f"{device_name}: 数据获取异常 - {str(e)[:30]}"
             }
+
+    def _has_fresh_device_data(self, device, recent_data) -> bool:
+        """Reject stale real-device caches while preserving simple test doubles."""
+        if not hasattr(device, 'last_successful_read'):
+            return True
+
+        try:
+            payload_timestamp = self._latest_payload_timestamp(recent_data)
+            last_read = float(
+                payload_timestamp
+                if payload_timestamp is not None
+                else device.last_successful_read
+            )
+            interval = float(
+                getattr(device, 'read_interval', getattr(device, 'READ_INTERVAL', 1.0))
+            )
+        except (TypeError, ValueError):
+            return False
+
+        max_age = max(
+            self._MIN_DATA_FRESHNESS_SECONDS,
+            interval * self._DATA_FRESHNESS_INTERVALS,
+        )
+        return last_read > 0 and (time.time() - last_read) <= max_age
+
+    @classmethod
+    def _latest_payload_timestamp(cls, payload):
+        if not isinstance(payload, dict):
+            return None
+
+        timestamps = []
+        timestamp = payload.get('timestamp')
+        if isinstance(timestamp, (int, float)):
+            timestamps.append(float(timestamp))
+
+        for value in payload.values():
+            nested = cls._latest_payload_timestamp(value)
+            if nested is not None:
+                timestamps.append(nested)
+        return max(timestamps) if timestamps else None
     
     def _validate_mfc_data_for_device(self, device):
         """验证MFC设备数据有效性"""
