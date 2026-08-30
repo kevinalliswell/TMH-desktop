@@ -109,4 +109,4 @@ class SwellingExperimentData(BaseExperimentData):
     # 'average_initial_diameter_mm': float
     # 'average_final_diameter_mm': float
     # 'average_initial_volume_cm3': float
-    # 'average_final_volume_cm3': float 
+    # 'average_final_volume_cm3': float

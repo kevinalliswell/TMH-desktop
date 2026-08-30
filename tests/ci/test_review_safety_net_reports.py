@@ -86,7 +86,11 @@ def test_rdi_report_marks_missing_indices_as_unmeasured(service):
 def _measured_reducibility_detail(**overrides):
     kwargs = {
         "experiment_type": "GB/T 13241",
-        "analysis_results": {"oxygen_content": 20.0},
+        "analysis_results": {
+            "total_iron_content": 20.0 / 0.430,
+            "feo_content": 0.0,
+            "initial_sample_weight": 100.0,
+        },
         "timestamps": [
             "2026-08-01T10:00:00",
             "2026-08-01T10:10:00",
@@ -182,14 +186,20 @@ def test_reducibility_metrics_require_observed_reducing_gas(service):
     assert metrics["reduction_degree_final"] is None
 
 
-def test_reduction_analysis_persists_oxygen_content():
+def test_reduction_analysis_persists_chemistry_and_recorded_sample_weight():
     started = datetime(2026, 8, 1, 10, 0, 0)
     analysis = ReductionCalculator().analyze_experiment_data(
         [
-            {"timestamp": started, "weight": 100.0},
-            {"timestamp": started + timedelta(minutes=60), "weight": 88.0},
+            {"timestamp": started, "weight": 99.5},
+            {"timestamp": started + timedelta(minutes=60), "weight": 90.0},
         ],
-        oxygen_content=20.0,
+        total_iron_content=60.0,
+        feo_content=25.0,
+        initial_sample_weight=100.0,
     )
 
-    assert analysis["oxygen_content"] == pytest.approx(20.0)
+    assert analysis["total_iron_content"] == pytest.approx(60.0)
+    assert analysis["feo_content"] == pytest.approx(25.0)
+    assert analysis["initial_weight"] == pytest.approx(100.0)
+    assert analysis["total_weight_loss"] == pytest.approx(10.0)
+    assert analysis["final_reduction_degree"] == pytest.approx(49.52)
