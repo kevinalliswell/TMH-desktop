@@ -39,6 +39,34 @@ class MfcCplProtocol:
         command = f"{ws_command_str}{checksum:02}" + "\r\n"
         return command.encode()
 
+    def parse_write_ack(self, response: bytes) -> Optional[bool]:
+        """Return the device acknowledgement carried by a CPL write reply.
+
+        ``True`` represents ``OK``, ``False`` represents ``NG``, and ``None``
+        means the bytes are not a write acknowledgement (for example, a
+        half-duplex adapter echoing the original ``XWS`` command).
+        """
+        try:
+            text = response.decode("ascii", errors="strict")
+        except (AttributeError, UnicodeDecodeError):
+            return None
+
+        stx = text.find(self.STX)
+        etx = text.find(self.ETX, stx + 1)
+        if stx == -1 or etx == -1:
+            return None
+
+        body = text[stx + 1:etx].strip().upper()
+        if not body or "XWS" in body:
+            return None
+
+        status = body.rsplit("X", 1)[-1].split(",", 1)[0].strip()
+        if status == "OK":
+            return True
+        if status == "NG":
+            return False
+        return None
+
     def parse_response(self, response: bytes) -> Optional[float]:
         try:
             text = response.decode("utf-8", errors="ignore")
@@ -59,4 +87,3 @@ class MfcCplProtocol:
             return None
         except Exception:
             return None
-
