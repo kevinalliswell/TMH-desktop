@@ -831,11 +831,6 @@ class ExperimentController(QObject):
         """
         self.initial_weight = weight
         self.logger.info(f"设置初始重量: {weight:.3f}g")
-        
-        # 同时将初始重量传递给数据处理器，用于失重计算
-        if self.data_handler and hasattr(self.data_handler, 'set_initial_weight'):
-            self.data_handler.set_initial_weight(weight)
-            self.logger.info(f"已将初始重量 {weight:.3f}g 传递给数据处理器")
     
     def manual_set_initial_weight(self, parent_widget=None) -> bool:
         """

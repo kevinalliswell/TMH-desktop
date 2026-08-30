@@ -150,10 +150,17 @@ class ExperimentModeSettingsPage(QWidget):
     mode_updated = Signal(str, dict)   # (mode_id, mode_data)
     mode_deleted = Signal(str)         # (mode_id,)
     
-    def __init__(self, parent=None, mode_manager=None, gas_safety_limits=None):
+    def __init__(
+        self,
+        parent=None,
+        mode_manager=None,
+        gas_safety_limits=None,
+        gas_safety_limits_provider=None,
+    ):
         super().__init__(parent)
-        # 可燃气体（H2/CO）流量安全上限，传递给阶段编辑对话框；缺省 5.0 L/min
+        # 编辑阶段时从运行时读取最新安全上限；静态值仅用于兼容独立页面调用。
         self.gas_safety_limits = gas_safety_limits or {"H2": 5.0, "CO": 5.0}
+        self._gas_safety_limits_provider = gas_safety_limits_provider
         self.setWindowTitle("实验模式设置")
         
         # 实验模式管理器
@@ -168,6 +175,14 @@ class ExperimentModeSettingsPage(QWidget):
         
         # 加载实验模式数据
         self.load_experiment_modes()
+
+    def _current_gas_safety_limits(self) -> dict:
+        """Return the latest flammable-gas limits from the runtime configuration."""
+        if self._gas_safety_limits_provider is not None:
+            limits = self._gas_safety_limits_provider()
+            if limits:
+                return dict(limits)
+        return dict(self.gas_safety_limits)
     
     def init_ui(self):
         """初始化用户界面"""
@@ -630,7 +645,10 @@ class ExperimentModeSettingsPage(QWidget):
         if self.current_mode_type != 'custom':
             return
         
-        dialog = StageEditDialog(parent=self, gas_safety_limits=self.gas_safety_limits)
+        dialog = StageEditDialog(
+            parent=self,
+            gas_safety_limits=self._current_gas_safety_limits(),
+        )
         if dialog.exec() == QDialog.Accepted:
             stage_data = dialog.get_stage_data()
             
@@ -667,7 +685,11 @@ class ExperimentModeSettingsPage(QWidget):
         if not stage_data:
             return
         
-        dialog = StageEditDialog(stage_data, parent=self, gas_safety_limits=self.gas_safety_limits)
+        dialog = StageEditDialog(
+            stage_data,
+            parent=self,
+            gas_safety_limits=self._current_gas_safety_limits(),
+        )
         if dialog.exec() == QDialog.Accepted:
             new_stage_data = dialog.get_stage_data()
             
