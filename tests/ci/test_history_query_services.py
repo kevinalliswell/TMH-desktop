@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+from src.application.dto import ExperimentDetailDTO
 from src.application.services import HistoryQueryService, ReportExportService
 from src.services.database import ExperimentData, ExperimentDatabase
+from src.ui.pages.history_query_page import HistoryQuery
 
 
 def _seed_database(db_path: Path) -> ExperimentDatabase:
@@ -101,3 +106,97 @@ def test_report_export_service_writes_csv_and_html_report(tmp_path):
     html_content = html_path.read_text(encoding="utf-8")
     assert "Ore A" in html_content
     assert "72.00" in html_content
+
+
+def test_report_export_service_writes_report_to_selected_directory(tmp_path):
+    database = _seed_database(tmp_path / "selected-directory.db")
+    resources_dir = Path(__file__).resolve().parents[2] / "resources"
+    export_service = ReportExportService(
+        history_query_service=HistoryQueryService(repository=database),
+        exports_dir=str(tmp_path / "exports"),
+        reports_dir=str(tmp_path / "default-reports"),
+        resources_dir=str(resources_dir),
+    )
+    selected_dir = tmp_path / "operator-selected"
+
+    html_path = Path(
+        export_service.generate_html_report("exp-001", output_dir=selected_dir)
+    )
+
+    assert html_path.parent == selected_dir
+    assert html_path.exists()
+
+
+def test_default_report_directory_uses_dedicated_downloads_folder(tmp_path):
+    export_service = ReportExportService(
+        history_query_service=object(),
+        exports_dir=str(tmp_path / "exports"),
+        reports_dir=str(tmp_path / "Downloads" / "TMH-Exp-Datas"),
+    )
+
+    report_dir = Path(export_service.default_report_dir())
+
+    assert report_dir == tmp_path / "Downloads" / "TMH-Exp-Datas"
+    assert report_dir.is_dir()
+
+
+def test_history_page_passes_selected_report_directory(monkeypatch, tmp_path):
+    selected_dir = tmp_path / "selected"
+    calls = []
+
+    class ReportService:
+        def default_report_dir(self):
+            return str(tmp_path / "Downloads" / "TMH-Exp-Datas")
+
+        def generate_html_report(self, experiment_id, output_dir=None):
+            calls.append((experiment_id, output_dir))
+            return str(Path(output_dir) / "report.html")
+
+    page = SimpleNamespace(
+        current_experiment={"experiment_id": "exp-001", "experiment_name": "RDI Test"},
+        report_export_service=ReportService(),
+        logger=SimpleNamespace(error=lambda *args, **kwargs: None),
+    )
+    monkeypatch.setattr(
+        QFileDialog,
+        "getExistingDirectory",
+        lambda *args, **kwargs: str(selected_dir),
+    )
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
+
+    HistoryQuery.generate_report(page)
+
+    assert calls == [("exp-001", str(selected_dir))]
+
+
+def test_nonstandard_experiment_generates_generic_html_report(tmp_path):
+    detail = ExperimentDetailDTO(
+        experiment_id="custom-001",
+        experiment_name="Custom Cycle",
+        sample_name="Ore B",
+        sample_weight=420.0,
+        start_time="2026-08-31T09:00:00",
+        end_time="2026-08-31T09:10:00",
+        operator="operator",
+        experiment_type="CUSTOM",
+        description="operator-defined cycle",
+        timestamps=["2026-08-31T09:00:00"],
+        temperatures=[800.0],
+        weights=[419.0],
+        weight_losses=[0.24],
+        gas_flows={"CO": [1.0], "CO2": [2.0], "N2": [3.0], "H2": [0.0]},
+    )
+    history_service = SimpleNamespace(
+        get_experiment_detail=lambda experiment_id: detail if experiment_id == "custom-001" else None
+    )
+    export_service = ReportExportService(
+        history_query_service=history_service,
+        reports_dir=str(tmp_path),
+    )
+
+    report_path = Path(export_service.generate_html_report("custom-001"))
+    content = report_path.read_text(encoding="utf-8")
+
+    assert "Custom Cycle" in content
+    assert "CUSTOM" in content
+    assert "800.0" in content
