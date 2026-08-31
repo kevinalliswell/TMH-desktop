@@ -215,6 +215,7 @@ class MainWindow(QMainWindow):
             history_query_service=self.ui_dependencies.history_query_service,
             report_export_service=self.ui_dependencies.report_export_service,
             password_manager=self.ui_dependencies.password_manager,
+            is_experiment_running=self._is_experiment_running,
         )
 
         pages = [
@@ -383,6 +384,14 @@ class MainWindow(QMainWindow):
             return
 
         super().closeEvent(event)
+
+    def _is_experiment_running(self) -> bool:
+        """Whether an experiment is live, for callers that must not disturb it."""
+        dependencies = getattr(self, "ui_dependencies", None)
+        experiment_api = getattr(dependencies, "experiment_api", None)
+        if experiment_api is None:
+            return False
+        return bool(experiment_api.is_experiment_running())
 
     def _stop_running_experiment_before_close(self) -> bool:
         """Synchronously stop an active experiment before device ports close."""

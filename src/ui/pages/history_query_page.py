@@ -39,10 +39,15 @@ class HistoryQuery(QWidget):
         history_query_service=None,
         report_export_service=None,
         password_manager=None,
+        is_experiment_running=None,
     ):
         super().__init__(parent)
 
         self.logger = get_logger(__name__)
+
+        # 维护类操作（VACUUM/修复）会取排他锁重写整个文件，必须与运行中的
+        # 1Hz 采样互斥，否则采样点会在重试耗尽后被直接丢弃。
+        self._is_experiment_running = is_experiment_running
 
         # 初始化管理器
         self.history_query_service = history_query_service or HistoryQueryService()
@@ -959,8 +964,27 @@ class HistoryQuery(QWidget):
             self.logger.error(f"分析膨胀实验 {experiment_id} 时发生错误: {e}")
             QMessageBox.critical(self, "分析错误", f"对实验 '{experiment_name}' 进行膨胀分析时发生错误: {e}")
 
+    def _maintenance_blocked_by_running_experiment(self) -> bool:
+        """Refuse VACUUM/repair while sampling is live; it would drop samples."""
+        if self._is_experiment_running is None:
+            return False
+        try:
+            return bool(self._is_experiment_running())
+        except Exception as exc:  # 判定失败时保守放行，但记录原因
+            self.logger.warning(f"无法确认实验运行状态，按未运行处理: {exc}")
+            return False
+
     def diagnose_database(self):
         """数据库诊断功能"""
+        if self._maintenance_blocked_by_running_experiment():
+            QMessageBox.warning(
+                self,
+                "实验运行中",
+                "实验正在运行，暂不能进行数据库诊断与修复。\n\n"
+                "修复会重写整个数据库文件并长时间独占写入，期间的采样数据会丢失。\n"
+                "请在实验结束后再执行。",
+            )
+            return
         try:
             integrity_info = asdict(self.history_query_service.validate_database_integrity())
 
