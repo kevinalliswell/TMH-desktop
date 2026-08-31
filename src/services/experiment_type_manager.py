@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Any, Union
 import logging
 
 from src.services.experiment_modes import ExperimentModeManager
+from src.services.standard_modes import STANDARD_MODES
 
 
 class ExperimentTypeCategory(Enum):
@@ -74,27 +75,14 @@ class ExperimentTypeManager:
     def _initialize_standard_types(self) -> Dict[str, ExperimentTypeInfo]:
         """初始化标准实验类型"""
         return {
-            "GB_13241_2017": ExperimentTypeInfo(
-                type_id="GB_13241_2017",
-                name="GB/T 13241-2017 铁矿石还原性测定方法",
-                description="标准铁矿石还原性测定实验",
-                category=ExperimentTypeCategory.STANDARD,
-                enabled=True
-            ),
-            "GB_13242_2017": ExperimentTypeInfo(
-                type_id="GB_13242_2017", 
-                name="GB/T 13242-2017 铁矿石低温粉化试验方法",
-                description="低温条件下铁矿石粉化特性测试",
-                category=ExperimentTypeCategory.STANDARD,
-                enabled=True
-            ),
-            "GB_13240_2018": ExperimentTypeInfo(
-                type_id="GB_13240_2018",
-                name="GB/T 13240-2018 球团矿自由膨胀指数测定方法", 
-                description="球团矿在还原气氛下的膨胀特性测试",
+            mode_id: ExperimentTypeInfo(
+                type_id=mode_id,
+                name=definition.name,
+                description=definition.description,
                 category=ExperimentTypeCategory.STANDARD,
                 enabled=True
             )
+            for mode_id, definition in STANDARD_MODES.items()
         }
     
     def _load_custom_types(self):
@@ -167,48 +155,6 @@ class ExperimentTypeManager:
         type_info = self.get_type_by_id(type_id)
         return type_info.category if type_info else None
     
-    def get_experiment_type_for_mode_id(self, mode_id: str) -> Optional[str]:
-        """
-        根据模式ID获取对应的实验类型
-        用于向后兼容，将模式ID映射到实验类型
-        """
-        if not mode_id:
-            return None
-        
-        # 标准模式映射
-        standard_mapping = {
-            "GB_13241_2017": "GB_13241_2017",
-            "GB_13242_2017": "GB_13242_2017", 
-            "GB_13240_2018": "GB_13240_2018"
-        }
-        
-        if mode_id in standard_mapping:
-            return standard_mapping[mode_id]
-        
-        # 自定义模式直接返回
-        if self.is_custom_type(mode_id):
-            return mode_id
-        
-        return None
-    
-    def get_mode_id_for_experiment_type(self, experiment_type: str) -> Optional[str]:
-        """
-        根据实验类型获取对应的模式ID
-        用于向后兼容
-        """
-        if not experiment_type:
-            return None
-        
-        # 标准类型映射
-        if experiment_type in self._standard_types:
-            return experiment_type
-        
-        # 自定义类型映射
-        if experiment_type in self._custom_types:
-            return experiment_type
-        
-        return None
-    
     def add_custom_type(self, type_info: ExperimentTypeInfo) -> bool:
         """添加自定义实验类型"""
         try:
@@ -280,21 +226,11 @@ class ExperimentTypeManager:
         # 标准类型从实验模式管理器获取
         if self.is_standard_type(type_id):
             try:
-                # 这里需要根据type_id获取对应的ExperimentType枚举
-                from src.services.experiment_modes import ExperimentType
-                exp_type_mapping = {
-                    "GB_13241_2017": ExperimentType.REDUCIBILITY,
-                    "GB_13242_2017": ExperimentType.LOW_TEMP_DEGRADATION,
-                    "GB_13240_2018": ExperimentType.FREE_SWELLING
-                }
-                
-                if type_id in exp_type_mapping:
-                    exp_type = exp_type_mapping[type_id]
-                    # ExperimentModeManager exposes get_experiment_stages (not
-                    # get_experiment_program); convert StageSettings -> dict so the
-                    # return shape matches the custom-type branch below.
-                    stages = self.experiment_mode_manager.get_experiment_stages(exp_type)
-                    return [self._stage_settings_to_dict(s) for s in stages]
+                definition = STANDARD_MODES[type_id]
+                stages = self.experiment_mode_manager.get_experiment_stages(
+                    definition.experiment_type
+                )
+                return [self._stage_settings_to_dict(s) for s in stages]
             except Exception as e:
                 self.logger.error(f"获取标准类型阶段信息失败: {str(e)}")
                 return []
