@@ -127,7 +127,7 @@ def test_apply_comm_settings_rebuilds_only_runtime_facade():
         services = runtime_services
 
         def apply_comm_settings(self):
-            pass
+            return True
 
     window = SimpleNamespace(
         runtime=_Runtime(),
