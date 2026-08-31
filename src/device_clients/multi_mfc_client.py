@@ -2,6 +2,7 @@ import time
 import os
 import csv
 import datetime
+import math
 import random
 from pathlib import Path
 from queue import Queue, Full, Empty, PriorityQueue
@@ -566,31 +567,48 @@ class MultiMFCClient(BaseDevice):
             command = self._send_command_async(cmd, CommandPriority.HIGH, self.WRITE_COMMAND_TIMEOUT)
             
             # 等待命令完成，设置较短的超时时间以避免UI阻塞
-            if command.completed.wait(timeout=self.WRITE_COMMAND_TIMEOUT + 1.0):
-                if command.result:
-                    self.logger.info(f"{gas_type} 流量设定成功: {value} L/min")
-                    
-                    # 更新本地缓存数据
-                    with self._latest_data_lock:
-                        if gas_type in self._latest_data and self._latest_data[gas_type] is not None:
-                            # 更新现有数据
-                            self._latest_data[gas_type]['SV'] = value
-                        else:
-                            # 初始化数据条目（通讯正常，设定值成功）
-                            self._latest_data[gas_type] = {
-                                'timestamp': time.time(),
-                                'gas_type': gas_type,
-                                'PV': None,  # PV值需要通过读取获得
-                                'SV': value
-                            }
-                    return True
-                else:
-                    self.logger.warning(f"{gas_type} 流量设定命令执行失败")
-                    return False
-            else:
+            if not command.completed.wait(timeout=self.WRITE_COMMAND_TIMEOUT + 1.0):
                 self.logger.error(f"{gas_type} 流量设定命令超时")
                 return False
-                
+
+            acknowledgement = self._cpl.parse_write_ack(command.result or b"")
+            if acknowledgement is not True:
+                if acknowledgement is False:
+                    self.logger.error(f"{gas_type} 流量设定被设备拒绝 (NG)")
+                else:
+                    self.logger.error(f"{gas_type} 流量设定未收到有效 OK 回复")
+                return False
+
+            if verify:
+                readback = self._read_register_value(gas_type, self.SV_ADDR)
+                expected_readback = scaled_value / 10.0
+                if readback is None or not math.isclose(
+                    readback,
+                    expected_readback,
+                    rel_tol=0.0,
+                    abs_tol=0.05,
+                ):
+                    self.logger.error(
+                        f"{gas_type} 流量读回校验失败: "
+                        f"期望寄存器值={expected_readback}, 实际={readback}"
+                    )
+                    return False
+
+            self.logger.info(f"{gas_type} 流量设定成功: {value} L/min")
+
+            # 仅在设备确认且可选读回校验成功后更新本地缓存。
+            with self._latest_data_lock:
+                if gas_type in self._latest_data and self._latest_data[gas_type] is not None:
+                    self._latest_data[gas_type]['SV'] = value
+                else:
+                    self._latest_data[gas_type] = {
+                        'timestamp': time.time(),
+                        'gas_type': gas_type,
+                        'PV': None,
+                        'SV': value,
+                    }
+            return True
+
         except Exception as e:
             self.logger.error(f"设置 {gas_type} 流量时出错: {e}")
             return False
