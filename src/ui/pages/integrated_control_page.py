@@ -311,6 +311,7 @@ class IntegratedControlPage(QWidget):
         # 按钮状态：从实验阶段派生
         self.control_panel.start_btn.setEnabled(is_idle)
         self.control_panel.stop_btn.setEnabled(is_running)
+        self.control_panel.tare_btn.setEnabled(is_idle)
 
         # 实验状态文本
         phase_text_map = {

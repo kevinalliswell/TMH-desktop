@@ -921,6 +921,19 @@ class ExperimentController(QObject):
             bool: 清零是否成功
         """
         try:
+            if self.is_experiment_running():
+                message = "实验运行中禁止天平清零，以免破坏初始重量和失重数据"
+                self.logger.error(message)
+                self.system_message_updated.emit(message)
+                audit(
+                    AuditCategory.BALANCE,
+                    "tare",
+                    result=AuditResult.REJECTED,
+                    operator=self.experiment_params.get("operator") if self.experiment_params else None,
+                    reason="experiment_running",
+                )
+                return False
+
             # 如果不跳过确认，先显示确认对话框
             if not skip_confirmation:
                 if not self._confirm_callback:
