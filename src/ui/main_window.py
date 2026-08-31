@@ -219,7 +219,8 @@ class MainWindow(QMainWindow):
 
     def _apply_comm_settings(self):
         """Apply settings and refresh pages that hold runtime-backed references."""
-        self.runtime.apply_comm_settings()
+        if not self.runtime.apply_comm_settings():
+            return False
         self.runtime_services = self.runtime.services
         self.ui_dependencies = self._build_ui_dependencies()
         if self.integrated_control_page:
@@ -230,6 +231,7 @@ class MainWindow(QMainWindow):
                 device_hub=self.runtime_services.device_hub,
                 gas_safety_limits=self.runtime_services.communication_config.mfc.gas_safety_limits,
             )
+        return True
 
     # ==============================
     # 通信状态
