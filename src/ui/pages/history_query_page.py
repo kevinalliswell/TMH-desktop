@@ -601,7 +601,19 @@ class HistoryQuery(QWidget):
                 QMessageBox.warning(self, "警告", "实验ID无效！")
                 return
 
-            report_path = self.report_export_service.generate_html_report(experiment_id)
+            output_dir = QFileDialog.getExistingDirectory(
+                self,
+                "选择报告保存目录",
+                self.report_export_service.default_report_dir(),
+                QFileDialog.ShowDirsOnly,
+            )
+            if not output_dir:
+                return
+
+            report_path = self.report_export_service.generate_html_report(
+                experiment_id,
+                output_dir=output_dir,
+            )
             QMessageBox.information(self, "报告生成成功", f"HTML报告已保存到:\n{report_path}")
 
         except UnsupportedReportTypeError as e:
