@@ -89,6 +89,12 @@ class ExperimentFacade:
     def set_experiment_mode_by_id(self, mode_id: str) -> bool:
         return self._runtime.set_experiment_mode_by_id(mode_id)
 
+    def reload_experiment_modes(self) -> None:
+        self._runtime.reload_experiment_modes()
+
+    def get_experiment_type_manager(self):
+        return self._runtime.experiment_type_manager
+
     def start_experiment(self, experiment_record=None) -> bool:
         return self._runtime.start_experiment(experiment_record)
 

@@ -48,7 +48,14 @@ class ExperimentController(QObject):
     experiment_time_updated = Signal(str)  # 实验计时更新，格式："00:01:23"
     stage_info_updated = Signal(dict)  # 阶段信息更新，包含详细信息
 
-    def __init__(self, device_manager=None, data_handler=None, parent=None):
+    def __init__(
+        self,
+        device_manager=None,
+        data_handler=None,
+        parent=None,
+        experiment_mode_manager=None,
+        experiment_type_manager=None,
+    ):
         """
         初始化实验控制器
         
@@ -79,8 +86,13 @@ class ExperimentController(QObject):
         self.experiment_params = {}
         
         # 初始化实验模式管理器（使用增强版本）
-        self.experiment_mode_manager = EnhancedExperimentModeManager()
-        self.experiment_type_manager = ExperimentTypeManager()
+        self.experiment_mode_manager = (
+            experiment_mode_manager or EnhancedExperimentModeManager()
+        )
+        self.experiment_type_manager = (
+            experiment_type_manager
+            or ExperimentTypeManager(mode_manager=self.experiment_mode_manager)
+        )
         self.current_experiment_type = None
         self.current_experiment_type_name = None
         self._last_safety_error = ""

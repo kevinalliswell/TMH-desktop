@@ -77,12 +77,6 @@ def test_cooling_stage_uses_an_upper_temperature_threshold():
 
     assert mgr.can_advance_stage(20.0, 3600.0) is True
     assert mgr.can_advance_stage(30.1, 3600.0) is False
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="#57 item 3: to_dict writes stage.value ('升温') but the parser maps only enum names, degrading every stage to IDLE",
-)
 def test_custom_stage_serialization_round_trip_expected():
     stage = StageSettings(
         stage=ExperimentStage.HEATING,

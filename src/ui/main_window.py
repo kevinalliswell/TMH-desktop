@@ -34,6 +34,7 @@ from src.services.app_runtime import AppRuntime
 from src.services.database import ExperimentDatabase
 from src.services.experiment_facade import ExperimentFacade
 from src.services.experiment_modes import ExperimentModeManager
+from src.services.experiment_type_manager import ExperimentTypeManager
 from src.utils.password_manager import PasswordManager
 
 
@@ -44,6 +45,7 @@ class UiDependencies:
     experiment_api: ExperimentFacade
     communication_service: CommunicationService
     experiment_mode_manager: ExperimentModeManager
+    experiment_type_manager: ExperimentTypeManager
     history_query_service: HistoryQueryService
     report_export_service: ReportExportService
     password_manager: PasswordManager
@@ -165,7 +167,8 @@ class MainWindow(QMainWindow):
         return UiDependencies(
             experiment_api=ExperimentFacade(self.runtime_services.experiment_runtime),
             communication_service=CommunicationService(),
-            experiment_mode_manager=ExperimentModeManager(),
+            experiment_mode_manager=self.runtime_services.experiment_mode_manager,
+            experiment_type_manager=self.runtime_services.experiment_type_manager,
             history_query_service=history_query_service,
             report_export_service=ReportExportService(
                 history_query_service=history_query_service
@@ -181,6 +184,7 @@ class MainWindow(QMainWindow):
             experiment_api=self.ui_dependencies.experiment_api,
             device_hub=self.runtime_services.device_hub,
             gas_safety_limits=self.runtime_services.communication_config.mfc.gas_safety_limits,
+            experiment_type_manager=self.ui_dependencies.experiment_type_manager,
         )
 
         self.comm_settings_page = CommunicationSettings(
@@ -195,6 +199,15 @@ class MainWindow(QMainWindow):
             parent=self,
             mode_manager=self.ui_dependencies.experiment_mode_manager,
             gas_safety_limits=self.runtime_services.communication_config.mfc.gas_safety_limits,
+        )
+        self.experiment_mode_settings_page.mode_created.connect(
+            self._on_experiment_modes_changed
+        )
+        self.experiment_mode_settings_page.mode_updated.connect(
+            self._on_experiment_modes_changed
+        )
+        self.experiment_mode_settings_page.mode_deleted.connect(
+            self._on_experiment_modes_changed
         )
 
         self.history_query_page = HistoryQuery(
@@ -230,8 +243,13 @@ class MainWindow(QMainWindow):
                 self.ui_dependencies.experiment_api,
                 device_hub=self.runtime_services.device_hub,
                 gas_safety_limits=self.runtime_services.communication_config.mfc.gas_safety_limits,
+                experiment_type_manager=self.ui_dependencies.experiment_type_manager,
             )
         return True
+
+    def _on_experiment_modes_changed(self, *_args) -> None:
+        """Synchronously refresh every view of experiment_modes.json."""
+        self.ui_dependencies.experiment_api.reload_experiment_modes()
 
     # ==============================
     # 通信状态
