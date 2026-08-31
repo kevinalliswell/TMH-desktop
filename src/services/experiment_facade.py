@@ -18,6 +18,10 @@ class ExperimentFacade:
         return self._runtime.system_message_updated
 
     @property
+    def safety_alert(self):
+        return self._runtime.safety_alert
+
+    @property
     def experiment_started(self):
         return self._runtime.experiment_started
 

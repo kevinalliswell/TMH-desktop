@@ -32,11 +32,13 @@ class ExperimentController(QObject):
 
     # 实验常量
     SAFETY_N2_FLOW_LPM = 5.0  # 安全气氛 N2 流量 (L/min)
+    SAFETY_FLOW_MAX_ATTEMPTS = 3
     AMBIENT_TEMP_CELSIUS = 25.0  # 默认环境/起始温度 (°C)
 
     # 信号定义
     status_updated = Signal(str)  # 实验状态更新
     system_message_updated = Signal(str)  # 系统消息更新
+    safety_alert = Signal(str)  # 需要人工处置的高可见气体安全告警
     experiment_completed = Signal()  # 实验完成
     experiment_started = Signal()  # 实验开始
     experiment_stopped = Signal()  # 实验停止
@@ -78,6 +80,7 @@ class ExperimentController(QObject):
         self.experiment_type_manager = ExperimentTypeManager()
         self.current_experiment_type = None
         self.current_experiment_type_name = None
+        self._last_safety_error = ""
         
         # 初始化定时器
         self._init_timers()
@@ -437,7 +440,7 @@ class ExperimentController(QObject):
         return self.current_experiment_type_name or "未知实验"
 
     def _finish_experiment_common(self, status_prefix: str, system_message: str,
-                                   via_phase: ExperimentPhase = ExperimentPhase.STOPPING) -> None:
+                                   via_phase: ExperimentPhase = ExperimentPhase.STOPPING) -> bool:
         """实验结束的公共逻辑（提取自 stop_experiment 和 complete_experiment）"""
         # 先转入中间阶段（STOPPING 或 COMPLETING）
         try:
@@ -457,7 +460,7 @@ class ExperimentController(QObject):
             self.logger.info(f"实验结束，已更新结束时间: {end_time}")
 
         # 切换到安全的N2气氛
-        self._set_safety_atmosphere()
+        safety_success = self._set_safety_atmosphere()
 
         # 转入 IDLE
         try:
@@ -467,8 +470,15 @@ class ExperimentController(QObject):
 
         # 发送信号
         exp_name = self._get_experiment_display_name()
-        self.status_updated.emit(f"{status_prefix}-{exp_name}")
-        self.system_message_updated.emit(system_message)
+        if safety_success:
+            self.status_updated.emit(f"{status_prefix}-{exp_name}")
+            self.system_message_updated.emit(system_message)
+        else:
+            # IDLE 状态变更会触发 UI 清理，因此在其后再次广播状态文本，
+            # 确保高危告警不会被结束清理覆盖。
+            self.status_updated.emit("危险：安全气氛设置失败")
+            self.system_message_updated.emit(self._last_safety_error)
+        return safety_success
 
     def start_experiment(self, experiment_record: ExperimentData | None = None) -> bool:
         """
@@ -582,18 +592,19 @@ class ExperimentController(QObject):
         if not self._sm.is_running:
             return False
 
-        self._finish_experiment_common(
-            "实验已停止", "用户手动停止实验",
+        safety_success = self._finish_experiment_common(
+            "实验已停止", "用户手动停止实验，已切换到N₂保护",
             via_phase=ExperimentPhase.STOPPING,
         )
         self.experiment_stopped.emit()
         self.logger.info("实验已停止")
         audit(
             AuditCategory.EXPERIMENT, "stop",
+            result=AuditResult.SUCCESS if safety_success else AuditResult.FAILURE,
             operator=self.experiment_params.get("operator") if self.experiment_params else None,
             experiment_id=getattr(self.current_experiment, "experiment_id", None),
         )
-        return True
+        return safety_success
     
     def execute_current_experiment_stage(self) -> None:
         """执行当前实验阶段"""
@@ -716,7 +727,7 @@ class ExperimentController(QObject):
     
     def complete_experiment(self) -> None:
         """完成实验"""
-        self._finish_experiment_common(
+        safety_success = self._finish_experiment_common(
             "实验完成", "实验自动完成，已切换到N₂保护",
             via_phase=ExperimentPhase.COMPLETING,
         )
@@ -724,6 +735,7 @@ class ExperimentController(QObject):
         self.logger.info("实验已完成")
         audit(
             AuditCategory.EXPERIMENT, "complete",
+            result=AuditResult.SUCCESS if safety_success else AuditResult.FAILURE,
             operator=self.experiment_params.get("operator") if self.experiment_params else None,
             experiment_id=getattr(self.current_experiment, "experiment_id", None),
         )
@@ -907,13 +919,54 @@ class ExperimentController(QObject):
             self.logger.error(error_msg)
             return False
     
-    def _set_safety_atmosphere(self) -> None:
-        """设置安全气氛"""
-        if self.device_manager:
-            self.device_manager.set_flow('N2', self.SAFETY_N2_FLOW_LPM)
-            self.device_manager.set_flow('CO', 0.0)
-            self.device_manager.set_flow('CO2', 0.0)
-            self.device_manager.set_flow('H2', 0.0)
+    def _set_safety_atmosphere(self) -> bool:
+        """设置安全气氛，并对每个失败通道进行有限重试。"""
+        targets = (
+            ('N2', self.SAFETY_N2_FLOW_LPM),
+            ('CO', 0.0),
+            ('CO2', 0.0),
+            ('H2', 0.0),
+        )
+        failed_gases = []
+
+        for gas, flow in targets:
+            success = False
+            for attempt in range(1, self.SAFETY_FLOW_MAX_ATTEMPTS + 1):
+                try:
+                    success = bool(
+                        self.device_manager
+                        and self.device_manager.set_flow(gas, flow)
+                    )
+                except Exception as exc:
+                    self.logger.error(
+                        f"安全气氛设置异常：{gas} -> {flow:.1f}L/min，"
+                        f"第 {attempt} 次尝试：{exc}",
+                        exc_info=True,
+                    )
+                    success = False
+                if success:
+                    break
+                self.logger.warning(
+                    f"安全气氛设置失败：{gas} -> {flow:.1f}L/min，"
+                    f"第 {attempt}/{self.SAFETY_FLOW_MAX_ATTEMPTS} 次尝试"
+                )
+            if not success:
+                failed_gases.append(gas)
+
+        if not failed_gases:
+            self._last_safety_error = ""
+            return True
+
+        failed_text = "、".join(failed_gases)
+        self._last_safety_error = (
+            f"安全气氛设置失败（{failed_text}），可燃气体可能仍在供给。"
+            "请立即检查气路与设备连接并人工处置，切勿离开现场。"
+        )
+        self.logger.critical(self._last_safety_error)
+        self.status_updated.emit("危险：安全气氛设置失败")
+        self.system_message_updated.emit(self._last_safety_error)
+        self.safety_alert.emit(self._last_safety_error)
+        return False
     
     def _update_experiment_time_internal(self) -> None:
         """内部实验时间更新"""
