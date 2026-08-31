@@ -7,6 +7,7 @@
 """
 import time
 import json
+import math
 import os
 import uuid
 import logging
@@ -808,6 +809,232 @@ class ExperimentController(QObject):
             self.system_message_updated.emit("样品温度读取已恢复，继续阶段判定")
         self._temperature_read_failures = 0
         self._temperature_fault_alerted = False
+
+    def get_stage_realignment_context(self) -> Optional[dict]:
+        """返回当前阶段时钟和可安全执行的人工校正操作。
+
+        直接从控制器实时状态计算，不依赖 UI 缓存，避免恢复操作作用于过期阶段。
+        """
+        state = self._sm.get_state()
+        if state.phase != ExperimentPhase.RUNNING:
+            return None
+
+        current_stage = self.experiment_mode_manager.get_current_stage_settings()
+        stages = self.experiment_mode_manager.get_experiment_stages()
+        stage_index = self.experiment_mode_manager.current_stage_index
+        if current_stage is None or not 0 <= stage_index < len(stages):
+            return None
+
+        elapsed_seconds = max(0.0, self._clock() - state.stage_start_time)
+        duration_minutes = float(current_stage.duration)
+        return {
+            "current_stage_index": stage_index + 1,
+            "total_stages": len(stages),
+            "stage_description": current_stage.description,
+            "elapsed_minutes": elapsed_seconds / 60.0,
+            "duration_minutes": duration_minutes,
+            "can_skip": stage_index < len(stages) - 1,
+            "can_adjust_elapsed": duration_minutes > 0,
+        }
+
+    def _reject_stage_realignment(self, action: str, reason: str, **fields) -> bool:
+        """报告并审计被拒绝的人工阶段校正。"""
+        self.logger.warning(reason)
+        self.system_message_updated.emit(reason)
+        audit(
+            AuditCategory.EXPERIMENT,
+            action,
+            result=AuditResult.REJECTED,
+            operator=self.experiment_params.get("operator") if self.experiment_params else None,
+            experiment_id=getattr(self.current_experiment, "experiment_id", None),
+            reason=reason,
+            **fields,
+        )
+        return False
+
+    def skip_to_next_stage(self) -> bool:
+        """经明确确认后，人工进入下一个配置阶段。
+
+        最后阶段不可跳过，否则会绕过数据库收尾和保护气氛设置；应继续使用正常的
+        完成或停止路径。
+        """
+        context = self.get_stage_realignment_context()
+        if context is None:
+            return self._reject_stage_realignment(
+                "skip_stage", "仅可在实验稳定运行时校正阶段"
+            )
+        if not context["can_skip"]:
+            return self._reject_stage_realignment(
+                "skip_stage",
+                "当前已是最后阶段，不能跳过；请使用停止实验完成安全收尾",
+                stage_index=context["current_stage_index"],
+            )
+        if self._confirm_callback is None:
+            return self._reject_stage_realignment(
+                "skip_stage", "缺少操作确认回调，已拒绝阶段跳转"
+            )
+
+        stages = self.experiment_mode_manager.get_experiment_stages()
+        from_index = self.experiment_mode_manager.current_stage_index
+        from_stage = stages[from_index]
+        to_stage = stages[from_index + 1]
+        confirmed = self._confirm_callback(
+            "确认跳过当前阶段",
+            (
+                f"即将从第 {from_index + 1} 阶段“{from_stage.description}”\n"
+                f"切换到第 {from_index + 2} 阶段“{to_stage.description}”。\n\n"
+                "系统将立即应用下一阶段的气体设定。此操作不可撤销，是否继续？"
+            ),
+            False,
+        )
+        if not confirmed:
+            return self._reject_stage_realignment(
+                "skip_stage",
+                "用户取消阶段跳转",
+                stage_index=from_index + 1,
+            )
+
+        latest_context = self.get_stage_realignment_context()
+        if (
+            latest_context is None
+            or latest_context["current_stage_index"] != from_index + 1
+        ):
+            return self._reject_stage_realignment(
+                "skip_stage",
+                "确认期间实验阶段已变化，已拒绝过期的阶段跳转",
+                requested_from_stage_index=from_index + 1,
+                current_stage_index=(
+                    latest_context["current_stage_index"] if latest_context else None
+                ),
+            )
+
+        next_stage = self.experiment_mode_manager.advance_to_next_stage()
+        if next_stage is None:
+            return self._reject_stage_realignment(
+                "skip_stage", "下一阶段不存在，阶段跳转已取消"
+            )
+
+        stage_applied = self.execute_current_experiment_stage()
+        if stage_applied is False:
+            self.logger.error("阶段已选择，但下一阶段设备设定未成功应用")
+            audit(
+                AuditCategory.EXPERIMENT,
+                "skip_stage",
+                result=AuditResult.FAILURE,
+                operator=(
+                    self.experiment_params.get("operator")
+                    if self.experiment_params else None
+                ),
+                experiment_id=getattr(self.current_experiment, "experiment_id", None),
+                from_stage_index=from_index + 1,
+                to_stage_index=from_index + 2,
+                reason="next stage application failed",
+            )
+            return False
+        current_temp = self.get_sample_temperature()
+        self._emit_stage_info_update(next_stage, current_temp, 0.0)
+        message = f"已校正到第 {from_index + 2} 阶段：{next_stage.description}"
+        self.system_message_updated.emit(message)
+        self.logger.info(message)
+        audit(
+            AuditCategory.EXPERIMENT,
+            "skip_stage",
+            operator=self.experiment_params.get("operator") if self.experiment_params else None,
+            experiment_id=getattr(self.current_experiment, "experiment_id", None),
+            from_stage_index=from_index + 1,
+            from_stage=from_stage.description,
+            to_stage_index=from_index + 2,
+            to_stage=next_stage.description,
+        )
+        return True
+
+    def adjust_current_stage_elapsed(self, elapsed_minutes: float) -> bool:
+        """经明确确认后，校正固定时长阶段的当前时钟。"""
+        context = self.get_stage_realignment_context()
+        if context is None:
+            return self._reject_stage_realignment(
+                "adjust_stage_elapsed", "仅可在实验稳定运行时校正阶段时长"
+            )
+        if not context["can_adjust_elapsed"]:
+            return self._reject_stage_realignment(
+                "adjust_stage_elapsed",
+                "当前阶段由温度条件驱动，不能通过修改时长推进",
+                stage_index=context["current_stage_index"],
+            )
+
+        requested_elapsed = elapsed_minutes
+        try:
+            elapsed_minutes = float(elapsed_minutes)
+        except (TypeError, ValueError):
+            elapsed_minutes = float("nan")
+        duration_minutes = context["duration_minutes"]
+        if not math.isfinite(elapsed_minutes) or not 0 <= elapsed_minutes <= duration_minutes:
+            return self._reject_stage_realignment(
+                "adjust_stage_elapsed",
+                f"阶段已用时必须在 0–{duration_minutes:g} 分钟之间",
+                requested_elapsed_minutes=(
+                    elapsed_minutes if math.isfinite(elapsed_minutes) else repr(requested_elapsed)
+                ),
+                stage_index=context["current_stage_index"],
+            )
+        if self._confirm_callback is None:
+            return self._reject_stage_realignment(
+                "adjust_stage_elapsed", "缺少操作确认回调，已拒绝阶段时长校正"
+            )
+
+        confirmed = self._confirm_callback(
+            "确认校正阶段时长",
+            (
+                f"当前第 {context['current_stage_index']} 阶段“{context['stage_description']}”\n"
+                f"将已用时校正为 {elapsed_minutes:.1f} 分钟（设定时长 {duration_minutes:g} 分钟）。\n\n"
+                "校正后可能在下一次检查时立即进入下一阶段，是否继续？"
+            ),
+            False,
+        )
+        if not confirmed:
+            return self._reject_stage_realignment(
+                "adjust_stage_elapsed",
+                "用户取消阶段时长校正",
+                requested_elapsed_minutes=elapsed_minutes,
+                stage_index=context["current_stage_index"],
+            )
+
+        latest_context = self.get_stage_realignment_context()
+        if (
+            latest_context is None
+            or latest_context["current_stage_index"] != context["current_stage_index"]
+        ):
+            return self._reject_stage_realignment(
+                "adjust_stage_elapsed",
+                "确认期间实验阶段已变化，已拒绝过期的时长校正",
+                requested_stage_index=context["current_stage_index"],
+                current_stage_index=(
+                    latest_context["current_stage_index"] if latest_context else None
+                ),
+            )
+
+        now = self._clock()
+        self._sm.update_state_silent(stage_start_time=now - elapsed_minutes * 60.0)
+        current_stage = self.experiment_mode_manager.get_current_stage_settings()
+        self._emit_stage_info_update(
+            current_stage,
+            self.get_sample_temperature(),
+            elapsed_minutes * 60.0,
+        )
+        message = f"已将第 {context['current_stage_index']} 阶段已用时校正为 {elapsed_minutes:.1f} 分钟"
+        self.system_message_updated.emit(message)
+        self.logger.info(message)
+        audit(
+            AuditCategory.EXPERIMENT,
+            "adjust_stage_elapsed",
+            operator=self.experiment_params.get("operator") if self.experiment_params else None,
+            experiment_id=getattr(self.current_experiment, "experiment_id", None),
+            stage_index=context["current_stage_index"],
+            stage=context["stage_description"],
+            previous_elapsed_minutes=context["elapsed_minutes"],
+            new_elapsed_minutes=elapsed_minutes,
+        )
+        return True
     
     def complete_experiment(self) -> None:
         """完成实验"""

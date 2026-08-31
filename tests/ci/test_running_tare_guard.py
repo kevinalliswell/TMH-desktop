@@ -45,6 +45,8 @@ def test_tare_button_is_enabled_only_when_idle(phase, expected_enabled):
             start_btn=Mock(),
             stop_btn=Mock(),
             tare_btn=Mock(),
+            skip_stage_btn=Mock(),
+            adjust_stage_elapsed_btn=Mock(),
         ),
         experiment_status=Mock(),
         _on_experiment_ended_cleanup=Mock(),

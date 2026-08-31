@@ -46,6 +46,30 @@ def test_runtime_and_facade_forward_experiment_completed_signal():
     runtime.cleanup()
 
 
+def test_facade_forwards_stage_realignment_operations():
+    calls = []
+
+    class _Runtime:
+        def get_stage_realignment_context(self):
+            calls.append(("context",))
+            return {"current_stage_index": 2}
+
+        def skip_to_next_stage(self):
+            calls.append(("skip",))
+            return True
+
+        def adjust_current_stage_elapsed(self, elapsed_minutes):
+            calls.append(("adjust", elapsed_minutes))
+            return True
+
+    facade = ExperimentFacade(_Runtime())
+
+    assert facade.get_stage_realignment_context() == {"current_stage_index": 2}
+    assert facade.skip_to_next_stage() is True
+    assert facade.adjust_current_stage_elapsed(12.5) is True
+    assert calls == [("context",), ("skip",), ("adjust", 12.5)]
+
+
 def test_data_handler_no_longer_exposes_state_compatibility_noops():
     obsolete_methods = {
         "set_experiment_running",

@@ -15,6 +15,8 @@ class ControlPanel(QFrame):
     # ---- 对外信号 ----
     start_experiment = Signal()
     stop_experiment = Signal()
+    skip_stage = Signal()
+    adjust_stage_elapsed = Signal()
     # set_flow = Signal(float)
     gas_flow_set = Signal(str, float)  # 气体流量设置信号 (气体名称, 流量值)
     tare_balance = Signal()  # 天平清零信号
@@ -49,6 +51,16 @@ class ControlPanel(QFrame):
         self.stop_btn = QPushButton("停止实验")
         self.stop_btn.setObjectName("stopExperimentBtn")
         experiment_layout.addWidget(self.stop_btn, 0, 1)
+
+        self.skip_stage_btn = QPushButton("跳到下一阶段")
+        self.skip_stage_btn.setObjectName("skipExperimentStageBtn")
+        self.skip_stage_btn.setEnabled(False)
+        experiment_layout.addWidget(self.skip_stage_btn, 1, 0)
+
+        self.adjust_stage_elapsed_btn = QPushButton("校正阶段时长")
+        self.adjust_stage_elapsed_btn.setObjectName("adjustStageElapsedBtn")
+        self.adjust_stage_elapsed_btn.setEnabled(False)
+        experiment_layout.addWidget(self.adjust_stage_elapsed_btn, 1, 1)
         
         experiment_group.setLayout(experiment_layout)
         layout.addWidget(experiment_group)
@@ -56,6 +68,8 @@ class ControlPanel(QFrame):
         # 连接信号（暂时保留原有的信号连接）
         self.start_btn.clicked.connect(self.start_experiment.emit)
         self.stop_btn.clicked.connect(self.stop_experiment.emit)
+        self.skip_stage_btn.clicked.connect(self.skip_stage.emit)
+        self.adjust_stage_elapsed_btn.clicked.connect(self.adjust_stage_elapsed.emit)
 
         # ---- 气氛控制 ----
         atmosphere_group = QGroupBox("气氛控制")

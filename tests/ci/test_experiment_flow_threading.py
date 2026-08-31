@@ -357,6 +357,206 @@ def test_final_stage_completion_returns_to_idle_and_sets_safety_gas(tmp_path, mo
         _stop_and_cleanup(controller)
 
 
+def test_confirmed_stage_skip_realigns_program_and_applies_next_stage_flows(
+    tmp_path,
+    monkeypatch,
+):
+    controller, device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
+    audit_events = []
+    monkeypatch.setattr(
+        "src.controllers.experiment_controller.audit",
+        lambda category, action, **fields: audit_events.append((category, action, fields)),
+    )
+    controller.set_interaction_callbacks(
+        confirm_callback=lambda _title, _message, _default_yes: True,
+    )
+
+    try:
+        assert controller.set_experiment_mode_by_id("GB_13242_2017") is True
+        assert controller.start_experiment() is True
+        audit_events.clear()
+        first_stage_call_count = len(device_hub.flow_calls)
+
+        assert controller.skip_to_next_stage() is True
+
+        state = controller.state_machine.get_state()
+        assert controller.experiment_mode_manager.current_stage_index == 1
+        assert state.current_stage_index == 1
+        assert state.stage_start_time == pytest.approx(controller._clock(), abs=1.0)
+        assert len(device_hub.flow_calls) == first_stage_call_count + 4
+        assert audit_events == [
+            (
+                "EXPERIMENT",
+                "skip_stage",
+                {
+                    "operator": "ci",
+                    "experiment_id": controller.current_experiment.experiment_id,
+                    "from_stage_index": 1,
+                    "from_stage": "升温至500℃，N₂保护",
+                    "to_stage_index": 2,
+                    "to_stage": "500℃恒温30min，N₂气氛",
+                },
+            )
+        ]
+    finally:
+        _stop_and_cleanup(controller)
+
+
+def test_stage_skip_requires_confirmation_and_never_skips_final_stage(tmp_path, monkeypatch):
+    controller, device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
+
+    try:
+        assert controller.set_experiment_mode_by_id("GB_13242_2017") is True
+        assert controller.start_experiment() is True
+        initial_flow_calls = len(device_hub.flow_calls)
+
+        assert controller.skip_to_next_stage() is False
+        assert controller.experiment_mode_manager.current_stage_index == 0
+        assert len(device_hub.flow_calls) == initial_flow_calls
+
+        controller.set_interaction_callbacks(
+            confirm_callback=lambda _title, _message, _default_yes: True,
+        )
+        stages = controller.experiment_mode_manager.get_experiment_stages()
+        final_stage_index = len(stages) - 1
+        controller.experiment_mode_manager.current_stage_index = final_stage_index
+        controller.state_machine.update_state_silent(current_stage_index=final_stage_index)
+
+        assert controller.skip_to_next_stage() is False
+        assert controller.experiment_mode_manager.current_stage_index == final_stage_index
+        assert len(device_hub.flow_calls) == initial_flow_calls
+    finally:
+        _stop_and_cleanup(controller)
+
+
+def test_confirmed_elapsed_adjustment_updates_only_fixed_duration_stage_clock(
+    tmp_path,
+    monkeypatch,
+):
+    controller, _device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
+    audit_events = []
+    monkeypatch.setattr(
+        "src.controllers.experiment_controller.audit",
+        lambda category, action, **fields: audit_events.append((category, action, fields)),
+    )
+    controller.set_interaction_callbacks(
+        confirm_callback=lambda _title, _message, _default_yes: True,
+    )
+
+    try:
+        assert controller.set_experiment_mode_by_id("GB_13242_2017") is True
+        assert controller.start_experiment() is True
+
+        # The first stage is temperature-driven, so an elapsed-time correction
+        # would falsely imply that it controls advancement.
+        assert controller.adjust_current_stage_elapsed(5.0) is False
+
+        assert controller.skip_to_next_stage() is True
+        audit_events.clear()
+        experiment_start_time = controller.state_machine.get_state().experiment_start_time
+
+        assert controller.adjust_current_stage_elapsed(12.5) is True
+
+        state = controller.state_machine.get_state()
+        assert state.stage_start_time == pytest.approx(controller._clock() - 750.0, abs=1.0)
+        assert state.experiment_start_time == experiment_start_time
+        context = controller.get_stage_realignment_context()
+        assert context["elapsed_minutes"] == pytest.approx(12.5, abs=0.03)
+        assert context["duration_minutes"] == 30.0
+        assert context["can_adjust_elapsed"] is True
+        assert audit_events == [
+            (
+                "EXPERIMENT",
+                "adjust_stage_elapsed",
+                {
+                    "operator": "ci",
+                    "experiment_id": controller.current_experiment.experiment_id,
+                    "stage_index": 2,
+                    "stage": "500℃恒温30min，N₂气氛",
+                    "previous_elapsed_minutes": pytest.approx(0.0, abs=0.03),
+                    "new_elapsed_minutes": 12.5,
+                },
+            )
+        ]
+    finally:
+        _stop_and_cleanup(controller)
+
+
+def test_elapsed_adjustment_rejects_unconfirmed_or_out_of_range_values(tmp_path, monkeypatch):
+    controller, _device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
+
+    try:
+        assert controller.set_experiment_mode_by_id("GB_13242_2017") is True
+        assert controller.start_experiment() is True
+        controller.set_interaction_callbacks(
+            confirm_callback=lambda _title, _message, _default_yes: True,
+        )
+        assert controller.skip_to_next_stage() is True
+        original_start = controller.state_machine.get_state().stage_start_time
+
+        assert controller.adjust_current_stage_elapsed(-1.0) is False
+        assert controller.adjust_current_stage_elapsed(31.0) is False
+        controller.set_interaction_callbacks(
+            confirm_callback=lambda _title, _message, _default_yes: False,
+        )
+        assert controller.adjust_current_stage_elapsed(10.0) is False
+
+        assert controller.state_machine.get_state().stage_start_time == original_start
+    finally:
+        _stop_and_cleanup(controller)
+
+
+def test_stage_realignments_reject_a_stage_changed_inside_confirmation(tmp_path, monkeypatch):
+    controller, _device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
+
+    def advance_while_confirming(_title, _message, _default_yes):
+        controller.experiment_mode_manager.advance_to_next_stage()
+        controller.execute_current_experiment_stage()
+        return True
+
+    try:
+        assert controller.set_experiment_mode_by_id("GB_13242_2017") is True
+        assert controller.start_experiment() is True
+        controller.set_interaction_callbacks(confirm_callback=advance_while_confirming)
+
+        # A modal confirmation runs a nested Qt event loop. If the stage timer
+        # advances there, the stale action must not skip a second stage.
+        assert controller.skip_to_next_stage() is False
+        assert controller.experiment_mode_manager.current_stage_index == 1
+
+        before_adjustment = controller.state_machine.get_state().stage_start_time
+        assert controller.adjust_current_stage_elapsed(10.0) is False
+        assert controller.experiment_mode_manager.current_stage_index == 2
+        assert controller.state_machine.get_state().stage_start_time >= before_adjustment
+        assert controller.get_stage_realignment_context()["elapsed_minutes"] < 0.1
+    finally:
+        _stop_and_cleanup(controller)
+
+
+def test_stage_skip_does_not_report_success_when_stage_application_fails(tmp_path, monkeypatch):
+    controller, _device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
+    audit_events = []
+    monkeypatch.setattr(
+        "src.controllers.experiment_controller.audit",
+        lambda category, action, **fields: audit_events.append((category, action, fields)),
+    )
+
+    try:
+        assert controller.set_experiment_mode_by_id("GB_13242_2017") is True
+        assert controller.start_experiment() is True
+        controller.set_interaction_callbacks(
+            confirm_callback=lambda _title, _message, _default_yes: True,
+        )
+        monkeypatch.setattr(controller, "execute_current_experiment_stage", lambda: False)
+        audit_events.clear()
+
+        assert controller.skip_to_next_stage() is False
+        assert audit_events[-1][0:2] == ("EXPERIMENT", "skip_stage")
+        assert audit_events[-1][2]["result"] == "FAILURE"
+    finally:
+        _stop_and_cleanup(controller)
+
+
 def test_data_handler_threads_save_experiment_rows_and_join_cleanly(tmp_path, monkeypatch):
     controller, device_hub = _build_controller(tmp_path, monkeypatch, temperature=500.0)
     experiment_db = controller.exp_db
