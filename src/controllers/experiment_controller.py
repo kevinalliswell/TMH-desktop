@@ -10,6 +10,7 @@ import json
 import os
 import uuid
 import logging
+import math
 from datetime import datetime
 from typing import Optional, Callable, Tuple
 from PySide6.QtCore import QCoreApplication, QObject, Signal, QTimer
@@ -34,6 +35,7 @@ class ExperimentController(QObject):
     SAFETY_N2_FLOW_LPM = 5.0  # 安全气氛 N2 流量 (L/min)
     SAFETY_FLOW_MAX_ATTEMPTS = 3
     STAGE_FLOW_MAX_ATTEMPTS = 3
+    TEMP_READ_FAILURE_ALERT_THRESHOLD = 3
     AMBIENT_TEMP_CELSIUS = 25.0  # 默认环境/起始温度 (°C)
 
     # 信号定义
@@ -82,6 +84,8 @@ class ExperimentController(QObject):
         self.current_experiment_type = None
         self.current_experiment_type_name = None
         self._last_safety_error = ""
+        self._temperature_read_failures = 0
+        self._temperature_fault_alerted = False
         
         # 初始化定时器
         self._init_timers()
@@ -410,6 +414,8 @@ class ExperimentController(QObject):
 
     def _begin_experiment_common(self) -> bool:
         """实验启动的公共逻辑（提取自 start_experiment 和 _dev_start_experiment）"""
+        self._temperature_read_failures = 0
+        self._temperature_fault_alerted = False
         now = time.time()
         self._sm.transition_to(
             ExperimentPhase.RUNNING,
@@ -727,37 +733,47 @@ class ExperimentController(QObject):
         )
         return False
     
-    def get_sample_temperature(self) -> float:
+    def get_sample_temperature(self) -> Optional[float]:
         """
         获取样品温度（T8）
         
         Returns:
-            float: 样品温度值，如果无法获取则返回0.0
+            float | None: 有效样品温度；无读数或非有限值时返回 None
         """
-        try:
-            if self.device_manager:
+        if self.device_manager:
+            try:
                 # 从设备管理器获取温度数据
                 status = self.device_manager.get_status()
-                frames = status.get("frames") or {}
+                frames = (status or {}).get("frames") or {}
                 temp_frame = frames.get("temperature")
                 if temp_frame:
                     temps = getattr(temp_frame, "payload", {}).get("temperatures", {}) or {}
-                    t8_temp = temps.get("T8")
-                    if t8_temp is not None and isinstance(t8_temp, (int, float)):
-                        return float(t8_temp)
-            
+                    temperature = self._finite_temperature(temps.get("T8"))
+                    if temperature is not None:
+                        return temperature
+            except Exception as e:
+                self.logger.warning(f"从设备管理器获取样品温度T8失败: {e}")
+
+        try:
             # 如果设备管理器不可用，尝试从数据处理器获取
             if self.data_handler and hasattr(self.data_handler, 'get_latest_temperature'):
                 temp_data = self.data_handler.get_latest_temperature()
                 if temp_data and "T8" in temp_data:
-                    t8_temp = temp_data["T8"]
-                    if t8_temp is not None and isinstance(t8_temp, (int, float)):
-                        return float(t8_temp)
-                        
+                    temperature = self._finite_temperature(temp_data["T8"])
+                    if temperature is not None:
+                        return temperature
         except Exception as e:
-            self.logger.warning(f"获取样品温度T8失败: {str(e)}")
-        
-        return 0.0
+            self.logger.warning(f"从数据处理器获取样品温度T8失败: {e}")
+
+        return None
+
+    @staticmethod
+    def _finite_temperature(value) -> Optional[float]:
+        try:
+            temperature = float(value)
+        except (TypeError, ValueError):
+            return None
+        return temperature if math.isfinite(temperature) else None
     
     def update_experiment_stage(self) -> None:
         """
@@ -774,6 +790,10 @@ class ExperimentController(QObject):
         
         # 获取当前样品温度（T8）
         current_temp = self.get_sample_temperature()
+        if current_temp is None:
+            self._handle_temperature_read_failure()
+            return
+        self._reset_temperature_read_failure()
         
         # 从状态机获取阶段开始时间（线程安全）
         state = self._sm.get_state()
@@ -796,6 +816,36 @@ class ExperimentController(QObject):
                 # 实验完成
                 self.logger.info(f"实验完成: 温度{current_temp:.1f}°C，总时间{elapsed_time/60:.1f}min")
                 self.complete_experiment()
+
+    def _handle_temperature_read_failure(self) -> None:
+        self._temperature_read_failures += 1
+        self.logger.warning(
+            "样品温度T8读取失败，暂停本次阶段判定 "
+            f"({self._temperature_read_failures}/"
+            f"{self.TEMP_READ_FAILURE_ALERT_THRESHOLD})"
+        )
+        if (
+            self._temperature_read_failures < self.TEMP_READ_FAILURE_ALERT_THRESHOLD
+            or self._temperature_fault_alerted
+        ):
+            return
+
+        self._temperature_fault_alerted = True
+        message = (
+            f"样品温度T8已连续 {self._temperature_read_failures} 次读取失败，"
+            "阶段判定已暂停。请立即检查温控仪表、串口与传感器连接。"
+        )
+        self.logger.critical(message)
+        self.status_updated.emit("危险：样品温度读取失败")
+        self.system_message_updated.emit(message)
+        self.safety_alert.emit(message)
+
+    def _reset_temperature_read_failure(self) -> None:
+        if self._temperature_read_failures and self._temperature_fault_alerted:
+            self.logger.info("样品温度T8读取已恢复，继续阶段判定")
+            self.system_message_updated.emit("样品温度读取已恢复，继续阶段判定")
+        self._temperature_read_failures = 0
+        self._temperature_fault_alerted = False
     
     def complete_experiment(self) -> None:
         """完成实验"""
@@ -1162,6 +1212,8 @@ class ExperimentController(QObject):
             float: 进度百分比 (0-100)
         """
         try:
+            if current_temp is None:
+                return 0.0
             # 如果是固定时间阶段，基于时间计算进度
             if stage.duration > 0:
                 time_progress = min(100.0, (elapsed_time / (stage.duration * 60)) * 100)
@@ -1224,7 +1276,11 @@ class ExperimentController(QObject):
                 "elapsed_time_seconds": elapsed_time,
                 "elapsed_time_minutes": elapsed_time / 60.0,
                 "duration_minutes": current_stage.duration,
-                "progress_percent": self._calculate_stage_progress(current_stage, current_temp, elapsed_time)
+                "progress_percent": (
+                    self._calculate_stage_progress(current_stage, current_temp, elapsed_time)
+                    if current_temp is not None
+                    else 0.0
+                )
             }
             
         except Exception as e:
