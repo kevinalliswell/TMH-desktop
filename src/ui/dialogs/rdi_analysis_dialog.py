@@ -4,6 +4,11 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QDialogButtonB
                                  QLabel, QDoubleSpinBox, QMessageBox)
 from PySide6.QtCore import Qt
 
+from src.utils.logger import get_logger
+
+
+logger = get_logger(__name__)
+
 
 def suggest_drum_sample_weight(data_points: list[dict], fallback: float) -> float:
     """优先建议最后一个有效的还原后重量，无法取得时回退到记录样重。"""
@@ -150,7 +155,7 @@ if __name__ == '__main__':
     # Example usage:
     dialog = RDIAnalysisDialog(experiment_name="TestRDI-001", initial_weight_g=500.0)
     if dialog.exec():
-        print("分析参数已获取:", dialog.get_data())
+        logger.info("分析参数已获取: %s", dialog.get_data())
     else:
-        print("用户取消输入。")
+        logger.info("用户取消输入。")
     sys.exit()

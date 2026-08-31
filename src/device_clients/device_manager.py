@@ -592,7 +592,11 @@ class DeviceManager:
 
 # 使用示例（已简化为仅创建配置文件）
 if __name__ == "__main__":
-    config_path = PathManager.get_config_path("comm_config.json")
-    print(f"配置文件路径: {config_path}")
-    DeviceManager(config_path=config_path)
-    print("设备管理器初始化完成，请通过 register_device() 方法注册设备")
+    logger = get_logger(__name__)
+    try:
+        config_path = PathManager.get_config_path("comm_config.json")
+        logger.info("配置文件路径: %s", config_path)
+        DeviceManager(config_path=config_path)
+        logger.info("设备管理器初始化完成，请通过 register_device() 方法注册设备")
+    except Exception:
+        logger.exception("程序出现异常")

@@ -12,6 +12,7 @@ from enum import IntEnum
 
 from src.device_clients.base_device import BaseDevice
 from tmh_comm.protocols.mfc_cpl import MfcCplProtocol
+from src.utils.logger import get_logger
 from src.utils.path_manager import PathManager
 # 移除数据滤波功能，直接使用实时数据
 
@@ -900,6 +901,7 @@ class MultiMFCClient(BaseDevice):
 
 def test_continuous_reading():
     """测试连续读取功能"""
+    logger = get_logger(__name__)
     config_path = PathManager.get_config_path('comm_config.json')
 
     # 初始化 MFC 客户端
@@ -912,15 +914,15 @@ def test_continuous_reading():
         # 启动线程
         multi_mfc.start()
         
-        print("开始连续读取数据 (Ctrl+C 停止)...")
-        print("当前气体类型:", list(multi_mfc.slave_addresses.keys()))
+        logger.info("开始连续读取数据 (Ctrl+C 停止)...")
+        logger.info("当前气体类型: %s", list(multi_mfc.slave_addresses.keys()))
         
         # # 测试设置流量
         # for gas_type in multi_mfc.slave_addresses:
         #     test_value = round(random.uniform(5.0, 10.0), 1)
-        #     print(f"测试设置 {gas_type} 流量为 {test_value}...")
+        #     logger.info("测试设置 %s 流量为 %s...", gas_type, test_value)
         #     result = multi_mfc.set_sp_value(gas_type, test_value)
-        #     print(f"设置结果: {'成功' if result else '失败'}")
+        #     logger.info("设置结果: %s", "成功" if result else "失败")
         #     time.sleep(0.5)
 
         # 主显示循环
@@ -931,22 +933,22 @@ def test_continuous_reading():
             current_flows = multi_mfc.current_flows
             setpoints = multi_mfc.setpoints
 
-            print("\n" + "=" * 40)
-            print(f"时间: {datetime.datetime.now().strftime('%H:%M:%S')}")
+            logger.info("=" * 40)
+            logger.info("时间: %s", datetime.datetime.now().strftime('%H:%M:%S'))
             for gas_type in multi_mfc.slave_addresses:
                 pv = current_flows[gas_type]
                 sv = setpoints[gas_type]
                 pv_str = f"{pv:.2f}" if pv is not None else "N/A"
                 sv_str = f"{sv:.2f}" if sv is not None else "N/A"
-                print(f"{gas_type}: 当前流量={pv_str}, 设定值={sv_str}")
-            print("=" * 40)
+                logger.info("%s: 当前流量=%s, 设定值=%s", gas_type, pv_str, sv_str)
+            logger.info("=" * 40)
 
     except KeyboardInterrupt:
-        print("\n正在停止采集...")
+        logger.info("正在停止采集...")
     finally:
         # 停止线程
         multi_mfc.stop()
-        print("测试结束")
+        logger.info("测试结束")
 
 
 if __name__ == "__main__":
