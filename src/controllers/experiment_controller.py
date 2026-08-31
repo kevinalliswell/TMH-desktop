@@ -86,6 +86,7 @@ class ExperimentController(QObject):
         self._last_safety_error = ""
         self._temperature_read_failures = 0
         self._temperature_fault_alerted = False
+        self._initial_weight_source = None
         
         # 初始化定时器
         self._init_timers()
@@ -259,8 +260,15 @@ class ExperimentController(QObject):
             self.experiment_params["project_name"] = params.get("project_name", "")
             self.experiment_params["date"] = params.get("date", "")
 
-            # 设置初始重量
-            self.initial_weight = self.experiment_params["sample_weight"]
+            nominal_weight = self.experiment_params["sample_weight"]
+            if self._initial_weight_source == "measured":
+                self.logger.info(
+                    f"保留实测初始重量 {self.initial_weight:.3f}g；"
+                    f"表单名义重量为 {nominal_weight:.3f}g"
+                )
+            else:
+                self.initial_weight = nominal_weight
+                self._initial_weight_source = "nominal"
 
             return True
 
@@ -477,6 +485,7 @@ class ExperimentController(QObject):
 
         # 发送信号
         exp_name = self._get_experiment_display_name()
+        self._initial_weight_source = None
         if safety_success:
             self.status_updated.emit(f"{status_prefix}-{exp_name}")
             self.system_message_updated.emit(system_message)
@@ -960,6 +969,7 @@ class ExperimentController(QObject):
             weight: 重量值
         """
         self.initial_weight = weight
+        self._initial_weight_source = "measured" if weight > 0 else None
         self.logger.info(f"设置初始重量: {weight:.3f}g")
         
         # 同时将初始重量传递给数据处理器，用于失重计算
