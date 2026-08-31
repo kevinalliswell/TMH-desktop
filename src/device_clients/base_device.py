@@ -26,12 +26,15 @@ class BaseDevice(threading.Thread, ABC):
         self.comm_type = comm_type
         self.data_queue = queue.Queue(maxsize=self.DATA_QUEUE_SIZE)
         self.stop_event = threading.Event()
-        self.lock = threading.Lock()
         # 串口句柄互斥锁：open/close/reconnect 与所有子类的读写路径必须共用同一把锁，
         # 否则重连线程会在 I/O 进行中把 Serial 对象换掉（pyserial 在 Windows 上会
         # 释放内核仍持有的 OVERLAPPED 结构，造成堆损坏级崩溃）。
-        # 子类若已有自己的串口锁，应在 __init__ 中把它指向 self._port_lock。
+        # 必须是可重入锁：读写路径持锁后还会经 serial_port_context 调用 open_serial_port。
         self._port_lock = threading.RLock()
+        # self.lock 是子类做串口 I/O 时用的互斥量（如 BalanceClient 的读与去皮）。
+        # 它与端口锁指向同一个对象，否则「I/O 持 self.lock、重连持 _port_lock」
+        # 两把锁互不相识，句柄竞争依然成立。
+        self.lock = self._port_lock
         self.serial_port = None
         # 移除调试模式，专注于实时设备数据采集
         self.connection_retries = 3

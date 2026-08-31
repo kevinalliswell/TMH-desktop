@@ -651,11 +651,14 @@ class HistoryQuery(QWidget):
                     'timestamp': datetime.fromisoformat(timestamps_str[i]),
                     'weight': weight
                 }
+                # 辅助通道单独解析：温度或 CO 读数失效不得连累有效的质量数据，
+                # 而且失效的 CO 必须以 None 保留下来，否则还原起点的不确定性
+                # 判定看不到它，偏移结果会被当作确定值保存。
                 if i < len(temperatures):
-                    point['temperature'] = float(temperatures[i])
+                    point['temperature'] = self._finite_or_none(temperatures[i])
                 co_flows = gas_flows.get("CO", [])
                 if i < len(co_flows):
-                    point["co_flow"] = float(co_flows[i])
+                    point["co_flow"] = self._finite_or_none(co_flows[i])
                 parsed_data_points.append(point)
             except (ValueError, TypeError) as e:
                 self.logger.warning(
@@ -963,6 +966,21 @@ class HistoryQuery(QWidget):
         except Exception as e:
             self.logger.error(f"分析膨胀实验 {experiment_id} 时发生错误: {e}")
             QMessageBox.critical(self, "分析错误", f"对实验 '{experiment_name}' 进行膨胀分析时发生错误: {e}")
+
+    @staticmethod
+    def _finite_or_none(value):
+        """Keep an auxiliary reading as a number, or as an explicit None.
+
+        Invalid readings must survive as None rather than raising: dropping the
+        row would discard the valid mass measurement alongside them, and an
+        invalid CO sample has to reach the calculator for the reduction-start
+        uncertainty check to see it.
+        """
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) else None
 
     def _maintenance_blocked_by_running_experiment(self) -> bool:
         """Refuse VACUUM/repair while sampling is live; it would drop samples."""
