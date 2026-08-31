@@ -24,6 +24,14 @@ class MonitorPanel(QFrame):
         "T9": "T9",
     }
 
+    FLOW_DISPLAY_ITEMS = (
+        ("N₂ 实际 PV (L/min)", "N2", "flowValue"),
+        ("CO₂ 实际 PV (L/min)", "CO2", "flowValue"),
+        ("CO 实际 PV (L/min)", "CO", "flowValue"),
+        ("H₂ 实际 PV (L/min)", "H2", "flowValue"),
+        ("总实际 PV (L/min)", "TotalFlow", "flowValue"),
+    )
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.labels = {}
@@ -110,11 +118,7 @@ class MonitorPanel(QFrame):
             self.labels[weight_key] = lbl_value
 
         # 第3行：前3个流量（N2, CO2, CO）
-        flow_items_row3 = [
-            ("N2流量(L/min)", "N2", "flowValue"),
-            ("CO2流量(L/min)", "CO2", "flowValue"),
-            ("CO流量(L/min)", "CO", "flowValue")
-        ]
+        flow_items_row3 = self.FLOW_DISPLAY_ITEMS[:3]
         
         for i, (label_text, flow_key, style_class) in enumerate(flow_items_row3):
             lbl_name = QLabel(label_text)
@@ -131,10 +135,7 @@ class MonitorPanel(QFrame):
             self.labels[flow_key] = lbl_value
 
         # 第4行：后2个流量（H2, 总流量）
-        flow_items_row4 = [
-            ("H2流量(L/min)", "H2", "flowValue"),
-            ("总流量(L/min)", "TotalFlow", "flowValue")
-        ]
+        flow_items_row4 = self.FLOW_DISPLAY_ITEMS[3:]
         
         for i, (label_text, flow_key, style_class) in enumerate(flow_items_row4):
             lbl_name = QLabel(label_text)
