@@ -27,6 +27,11 @@ class BaseDevice(threading.Thread, ABC):
         self.data_queue = queue.Queue(maxsize=self.DATA_QUEUE_SIZE)
         self.stop_event = threading.Event()
         self.lock = threading.Lock()
+        # 串口句柄互斥锁：open/close/reconnect 与所有子类的读写路径必须共用同一把锁，
+        # 否则重连线程会在 I/O 进行中把 Serial 对象换掉（pyserial 在 Windows 上会
+        # 释放内核仍持有的 OVERLAPPED 结构，造成堆损坏级崩溃）。
+        # 子类若已有自己的串口锁，应在 __init__ 中把它指向 self._port_lock。
+        self._port_lock = threading.RLock()
         self.serial_port = None
         # 移除调试模式，专注于实时设备数据采集
         self.connection_retries = 3
@@ -106,40 +111,46 @@ class BaseDevice(threading.Thread, ABC):
         Returns:
             bool: 串口是否成功打开
         """
-        # 如果已经有串口对象但无效，先清理
-        if self.serial_port is not None:
-            try:
-                if not self.serial_port.is_open:
+        with self._port_lock:
+            # 如果已经有串口对象但无效，先清理
+            if self.serial_port is not None:
+                try:
+                    if not self.serial_port.is_open:
+                        self.serial_port = None
+                    else:
+                        self.connection_healthy = True
+                        return True  # 串口已经正常打开
+                except Exception:
                     self.serial_port = None
-                else:
+                    self.connection_healthy = False
+
+            # 尝试打开新的串口连接
+            if self.serial_port is None:
+                try:
+                    self.serial_port = serial.Serial(
+                        port=self.port_config.get('port'),
+                        baudrate=self.port_config.get('baudrate', 1200),
+                        bytesize=self.port_config.get('bytesize', 8),
+                        parity=self.port_config.get('parity', 'E'),
+                        stopbits=self.port_config.get('stopbits', 1),
+                        xonxoff=self.port_config.get('xonxoff', 0),
+                        timeout=0.5  # 优化超时时间，提高响应速度
+                    )
+                    self.logger.info(f"串口 {self.port_config.get('port')} 已成功打开")
                     self.connection_healthy = True
-                    return True  # 串口已经正常打开
-            except Exception:
-                self.serial_port = None
-                self.connection_healthy = False
-        
-        # 尝试打开新的串口连接
-        if self.serial_port is None:
-            try:
-                self.serial_port = serial.Serial(
-                    port=self.port_config.get('port'),
-                    baudrate=self.port_config.get('baudrate', 1200),
-                    bytesize=self.port_config.get('bytesize', 8),
-                    parity=self.port_config.get('parity', 'E'),
-                    stopbits=self.port_config.get('stopbits', 1),
-                    xonxoff=self.port_config.get('xonxoff', 0),
-                    timeout=0.5  # 优化超时时间，提高响应速度
-                )
-                self.logger.info(f"串口 {self.port_config.get('port')} 已成功打开")
-                self.connection_healthy = True
-                self.reconnect_attempt = 0  # 重置重连计数
-                return True
-            except serial.SerialException as e:
-                self.logger.error(f'打开串口失败: {e}')
-                self.serial_port = None
-                self.connection_healthy = False
-                return False
-        return True
+                    # 注意：重连计数只在成功“通信”后重置（见 note_successful_exchange），
+                    # 端口能打开但从站不应答时必须继续退避，否则会 1 秒一次反复开关端口。
+                    return True
+                except serial.SerialException as e:
+                    self.logger.error(f'打开串口失败: {e}')
+                    self.serial_port = None
+                    self.connection_healthy = False
+                    return False
+            return True
+
+    def note_successful_exchange(self) -> None:
+        """Reset the reconnect backoff after a real data exchange, not a mere open."""
+        self.reconnect_attempt = 0
     
     def smart_reconnect(self) -> bool:
         """智能重连机制 - 使用指数退避策略
@@ -161,12 +172,14 @@ class BaseDevice(threading.Thread, ABC):
         self.logger.info(f"{self.device_type} 尝试重新连接 (第 {self.reconnect_attempt + 1} 次, 延迟 {required_delay}s)")
         self.last_reconnect_time = current_time
         self.reconnect_attempt += 1
-        
-        # 先关闭旧连接
-        self.close_serial_port()
-        
-        # 尝试打开新连接
-        if self.open_serial_port():
+
+        # 关闭与重开必须在同一把端口锁内完成，否则读写线程会在两者之间
+        # 拿到一个已被关闭（或已被换掉）的 Serial 对象。
+        with self._port_lock:
+            self.close_serial_port()
+            reopened = self.open_serial_port()
+
+        if reopened:
             self.logger.info(f"{self.device_type} 重新连接成功！")
             return True
         else:
@@ -175,16 +188,17 @@ class BaseDevice(threading.Thread, ABC):
 
     def close_serial_port(self) -> None:
         """关闭串口连接"""
-        if self.serial_port is not None:
-            try:
-                if self.serial_port.is_open:
-                    self.serial_port.close()
-                    self.logger.debug("串口已关闭")
-            except Exception as e:
-                self.logger.error(f'关闭串口时出错: {e}')
-            finally:
-                self.serial_port = None
-        self.connection_healthy = False
+        with self._port_lock:
+            if self.serial_port is not None:
+                try:
+                    if self.serial_port.is_open:
+                        self.serial_port.close()
+                        self.logger.debug("串口已关闭")
+                except Exception as e:
+                    self.logger.error(f'关闭串口时出错: {e}')
+                finally:
+                    self.serial_port = None
+            self.connection_healthy = False
 
     @contextmanager
     def serial_port_context(self):
@@ -225,21 +239,34 @@ class BaseDevice(threading.Thread, ABC):
             self.logger.error(f"检查串口时出错: {e}")
             return False
 
-    def stop(self) -> None:
-        """停止设备线程"""
+    STOP_JOIN_TIMEOUT = 5.0
+
+    def stop(self) -> bool:
+        """停止设备线程。
+
+        Returns:
+            bool: 线程是否已确实退出并完成串口清理。False 表示线程仍在运行，
+                  调用方不得据此认为端口已释放（尤其不得据此重建设备）。
+        """
         self.stop_event.set()
         self.logger.debug(f"{self.device_type} 设备线程停止中...")
 
         # 先等待采集线程退出，再关闭串口；避免线程仍在串口读写时句柄被提前关闭。
         if self.is_alive():
-            self.join(timeout=5.0)
+            self.join(timeout=self.STOP_JOIN_TIMEOUT)
 
         if self.is_alive():
-            self.logger.warning(f"{self.device_type} 设备线程未能在预期时间内停止")
-        else:
-            self.logger.debug(f"{self.device_type} 设备线程已停止")
+            # 绝不能在此关闭端口：线程可能正处于 read()/write() 之中，
+            # 关闭句柄会让内核写入已释放的内存。线程是守护线程，会随进程退出。
+            self.logger.error(
+                f"{self.device_type} 设备线程未能在 {self.STOP_JOIN_TIMEOUT}s 内停止；"
+                "串口保持打开以避免句柄竞争"
+            )
+            return False
 
+        self.logger.debug(f"{self.device_type} 设备线程已停止")
         self.close_serial_port()
+        return True
             
     @contextmanager
     def create_serial_port(self, port=None, baudrate=None, bytesize=None, parity=None, stopbits=None, xonxoff=None):

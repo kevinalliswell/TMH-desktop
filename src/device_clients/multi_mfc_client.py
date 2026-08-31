@@ -119,7 +119,9 @@ class MultiMFCClient(BaseDevice):
             self._latest_data[gas_type] = None  # 初始化为None，通讯成功后才有数据
 
         # 串口管理 - 优化串口访问机制（移除自动关闭，保持长连接）
-        self._serial_lock = threading.RLock()  # 使用可重入锁
+        # 与父类共用同一把端口锁：open/close/smart_reconnect 与本类的命令执行器
+        # 必须互斥，否则重连会在一条命令执行到一半时把 Serial 对象换掉。
+        self._serial_lock = self._port_lock
         self._serial_last_used = 0
         # 移除串口超时自动关闭机制，改为保持长连接
         # self._serial_timeout = 10.0  # 已移除：导致通讯中断
@@ -202,17 +204,37 @@ class MultiMFCClient(BaseDevice):
             self._command_processor_thread.start()
             self.logger.debug("命令处理线程已启动")
 
-    def _stop_command_processor(self):
-        """停止命令处理线程"""
+    def _stop_command_processor(self) -> bool:
+        """停止命令处理线程。
+
+        Returns:
+            bool: 线程是否已确实退出。调用方据此决定端口能否安全关闭。
+        """
         self._command_processor_running = False
         if self._command_processor_thread and self._command_processor_thread.is_alive():
+            # 取消所有排队中的命令，让等待方立即得到明确的失败而不是超时。
+            self._cancel_pending_commands()
             # 添加一个停止命令到队列
             try:
                 self._command_queue.put_nowait((0, SerialCommand(b'', CommandPriority.HIGH)))
             except Full:
                 pass
             self._command_processor_thread.join(timeout=3.0)
+            if self._command_processor_thread.is_alive():
+                return False
             self.logger.debug("命令处理线程已停止")
+        return True
+
+    def _cancel_pending_commands(self) -> None:
+        """Drain the queue and release every waiter instead of dropping commands silently."""
+        while True:
+            try:
+                _, command = self._command_queue.get_nowait()
+            except Empty:
+                break
+            if command.cmd_bytes:
+                command.cancelled.set()
+                command.completed.set()
 
     def _command_processor_loop(self):
         """命令处理器主循环"""
@@ -768,6 +790,7 @@ class MultiMFCClient(BaseDevice):
                         # 成功读取数据，更新健康状态
                         self.last_successful_read = current_time
                         self.connection_healthy = True
+                        self.note_successful_exchange()
                         consecutive_errors = 0
                         
                         # 更新队列
@@ -817,20 +840,20 @@ class MultiMFCClient(BaseDevice):
         self.logger.info(f"========== {self.device_type} 流量采集停止 ==========")
         self.close_serial_port()
 
-    def stop(self):
-        """停止设备，覆盖父类方法以提供额外的清理"""
+    def stop(self) -> bool:
+        """停止设备，覆盖父类方法以提供额外的清理。"""
         self.logger.info(f"{self.device_type} 准备停止...")
 
-        # 先停止命令处理线程，确保它不会在串口关闭后仍持锁读写串口
-        # （父类 close_serial_port 不受 _serial_lock 保护）。
-        self._stop_command_processor()
+        # 先停止命令处理线程，确保它不会在串口关闭后仍持锁读写串口。
+        processor_stopped = self._stop_command_processor()
 
-        # 再让主采集线程退出并关闭串口（父类会先 join 线程再关闭句柄）。
-        super().stop()
+        # 再让主采集线程退出并关闭串口（父类会先 join 线程再关闭句柄，
+        # 并在线程未退出时保留端口以避免句柄竞争）。
+        device_stopped = super().stop()
 
-        # 兜底确保串口已关闭。
-        with self._serial_lock:
-            self.close_serial_port()
+        if not processor_stopped:
+            self.logger.error(f"{self.device_type} 命令处理线程未能停止；串口保持打开")
+        return bool(processor_stopped and device_stopped)
 
     @property
     def current_flows(self) -> Dict[str, Optional[float]]:

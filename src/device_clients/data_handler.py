@@ -145,9 +145,12 @@ class DataHandler(QObject):
         # 重置停止事件
         self.stop_event.clear()
         
-        # 创建新的线程
-        self.data_thread = threading.Thread(target=self._data_processing_loop)
-        self.db_thread = threading.Thread(target=self._db_saving_loop)
+        # 创建新的线程。
+        # daemon=True 是最后一道保险：stop() 正常路径仍会 signal + join 并完成
+        # 最终落盘，但当某个线程卡在 SQLite 写入时，非守护线程会让解释器在
+        # threading._shutdown() 里无超时地等下去，进程永远退不掉。
+        self.data_thread = threading.Thread(target=self._data_processing_loop, daemon=True)
+        self.db_thread = threading.Thread(target=self._db_saving_loop, daemon=True)
         
         # 启动线程
         self.data_thread.start()

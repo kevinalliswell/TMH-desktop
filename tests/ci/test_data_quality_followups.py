@@ -13,7 +13,17 @@ class _IdleDeviceManager:
         return {}
 
 
-def test_data_handler_workers_are_joinable_non_daemon_threads(tmp_path):
+def test_data_handler_workers_are_joined_and_cannot_wedge_process_exit(tmp_path):
+    """Workers must be joined by stop() AND be unable to block interpreter exit.
+
+    This replaces an earlier assertion that the workers are non-daemon. Being
+    non-daemon does not make them joinable — stop() joins them either way, and
+    the flush guarantees are covered by the two tests below — but it does hand
+    a worker that outlives its 3 s join to threading._shutdown(), which joins
+    with no timeout. Combined with AppRuntime.stop() returning early when the
+    safety atmosphere cannot be confirmed, that made the process impossible to
+    exit in exactly the situation the safety guard exists for.
+    """
     handler = DataHandler(
         db_path=str(tmp_path / "samples.db"),
         device_manager=_IdleDeviceManager(),
@@ -23,10 +33,15 @@ def test_data_handler_workers_are_joinable_non_daemon_threads(tmp_path):
 
     handler.start()
     try:
-        assert handler.data_thread.daemon is False
-        assert handler.db_thread.daemon is False
+        assert handler.data_thread.daemon is True
+        assert handler.db_thread.daemon is True
     finally:
+        data_thread, db_thread = handler.data_thread, handler.db_thread
         handler.stop()
+
+    # stop() still shuts them down cleanly; daemon is only the last-resort net.
+    assert data_thread.is_alive() is False
+    assert db_thread.is_alive() is False
 
 
 def test_db_worker_flushes_buffer_when_stopped(tmp_path):

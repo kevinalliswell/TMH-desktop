@@ -361,8 +361,17 @@ class MainWindow(QMainWindow):
 
         try:
             # 安全停机成功后再关闭串口和后台服务。
-            if self.runtime:
-                self.runtime.stop()
+            # stop() 返回 False 表示后台拒绝停机（通常是安全气氛未确认）；
+            # 必须与异常同等对待，否则窗口会关闭而设备线程仍在运行、气体仍在供给。
+            if self.runtime and self.runtime.stop() is False:
+                self.logger.error("运行时服务拒绝停机，取消退出")
+                QMessageBox.critical(
+                    self,
+                    "退出失败",
+                    "后台服务未能安全停止，系统将保持运行。请检查设备状态后重试。",
+                )
+                event.ignore()
+                return
         except Exception as e:
             self.logger.error(f"停止运行时服务失败: {e}", exc_info=True)
             QMessageBox.critical(
