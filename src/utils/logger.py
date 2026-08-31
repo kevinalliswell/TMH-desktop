@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 import logging
-import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Optional
+
+from src.utils.path_manager import PathManager
 
 class LoggerManager:
     """日志管理器，提供统一的日志配置"""
@@ -21,8 +21,7 @@ class LoggerManager:
     def __init__(self):
         if not LoggerManager._initialized:
             # 创建日志目录
-            self.log_dir = Path(__file__).parent.parent.parent / 'logs'
-            self.log_dir.mkdir(parents=True, exist_ok=True)
+            self.log_dir = Path(PathManager.get_logs_path())
             
             # 配置根日志记录器
             self._setup_root_logger()

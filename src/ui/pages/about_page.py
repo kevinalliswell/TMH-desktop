@@ -3,11 +3,14 @@
 from PySide6.QtCore import Qt
 import datetime
 
+from src.utils.software_info import load_software_info
+
 class AboutPage(QWidget):
     """关于页面"""
     
-    def __init__(self):
+    def __init__(self, software_info: dict | None = None):
         super().__init__()
+        self.software_info = software_info or load_software_info()
         self.init_ui()
         
     def init_ui(self):
@@ -82,10 +85,10 @@ class AboutPage(QWidget):
         header_layout.addWidget(subtitle_label)
         
         # 版本信息
-        version_label = QLabel("版本 1.0.250929")
-        version_label.setObjectName("aboutVersion")
-        version_label.setAlignment(Qt.AlignCenter)
-        header_layout.addWidget(version_label)
+        self.version_label = QLabel(f"版本 {self.software_info['version']}")
+        self.version_label.setObjectName("aboutVersion")
+        self.version_label.setAlignment(Qt.AlignCenter)
+        header_layout.addWidget(self.version_label)
         
         layout.addWidget(header_frame)
         
@@ -194,4 +197,4 @@ class AboutPage(QWidget):
                 # 添加空行
                 layout.addSpacing(8)
         
-        return card 
+        return card
