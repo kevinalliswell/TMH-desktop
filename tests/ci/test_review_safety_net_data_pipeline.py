@@ -260,9 +260,12 @@ def test_startup_balance_dropout_does_not_crash_report(tmp_path, db):
 
     txt_path = tmp_path / "exports" / "dropout.txt"
     exporter.export_experiment_data("EXP-1", str(txt_path), "txt")
-    # The shared tabular-export contract represents missing values as empty
-    # cells consistently across TXT, CSV, and XLSX (never as a fabricated 0).
-    assert "\t900.0\t\t\t4.5\t" in txt_path.read_text(encoding="utf-8")
+    # A reading the instrument could not take is marked 无效 — never a
+    # fabricated 0, and never a blank cell either, which in a GB/T test record
+    # is indistinguishable from 'this column was not populated'. (The blank-cell
+    # contract asserted here previously was introduced by a merge conflict
+    # resolution that dropped this marker; the marker is the intended behavior.)
+    assert "\t900.0\t无效\t无效\t4.5\t" in txt_path.read_text(encoding="utf-8")
 
     report_path = Path(exporter.generate_html_report("EXP-1"))
     assert report_path.exists()

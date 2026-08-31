@@ -60,11 +60,21 @@ class HistoryQueryService:
             if not timestamp:
                 continue
             quality = point.get("data_quality")
-            weight_valid = not (
-                isinstance(quality, dict) and quality.get("weight") is False
-            )
+            quality = quality if isinstance(quality, dict) else {}
+            flow_quality = quality.get("flows")
+            flow_quality = flow_quality if isinstance(flow_quality, dict) else {}
+
+            weight_valid = quality.get("weight") is not False
+            temperature_valid = quality.get("temperature") is not False
+
             detail.timestamps.append(timestamp)
-            detail.temperatures.append(self._safe_float(point.get("temperature")))
+            # 无效读数一律以 None 表达。写成 0.0 会与真实的 0℃ / 关闭的气路
+            # 无法区分——还原起点正是靠 co_flow > 0 判定的。
+            detail.temperatures.append(
+                self._safe_float(point.get("temperature"), default=None)
+                if temperature_valid
+                else None
+            )
             detail.weights.append(
                 self._safe_float(point.get("weight"), default=None)
                 if weight_valid
@@ -75,10 +85,17 @@ class HistoryQueryService:
                 if weight_valid
                 else None
             )
-            detail.gas_flows["CO"].append(self._safe_float(point.get("co_flow")))
-            detail.gas_flows["CO2"].append(self._safe_float(point.get("co2_flow")))
-            detail.gas_flows["N2"].append(self._safe_float(point.get("n2_flow")))
-            detail.gas_flows["H2"].append(self._safe_float(point.get("h2_flow")))
+            for gas, column in (
+                ("CO", "co_flow"),
+                ("CO2", "co2_flow"),
+                ("N2", "n2_flow"),
+                ("H2", "h2_flow"),
+            ):
+                detail.gas_flows[gas].append(
+                    self._safe_float(point.get(column), default=None)
+                    if flow_quality.get(gas) is not False
+                    else None
+                )
 
         return detail
 

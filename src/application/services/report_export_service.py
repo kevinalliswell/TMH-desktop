@@ -229,18 +229,32 @@ class ReportExportService:
         ]
 
     def _iter_series_rows(self, detail: ExperimentDetailDTO) -> list[list]:
+        """Rows for the tabular exports.
+
+        Invalid readings (a failed MFC/balance/temperature read) must be
+        distinguishable from a blank column in a GB/T test record, so they are
+        rendered as 无效 rather than left empty. Missing trailing samples — a
+        series that is simply shorter — stay blank.
+        """
         rows = []
+        series = (
+            detail.temperatures,
+            detail.weights,
+            detail.weight_losses,
+            detail.gas_flows["CO"],
+            detail.gas_flows["CO2"],
+            detail.gas_flows["N2"],
+            detail.gas_flows["H2"],
+        )
         for index, timestamp in enumerate(detail.timestamps):
-            rows.append([
-                timestamp,
-                self._get_value(detail.temperatures, index),
-                self._get_value(detail.weights, index),
-                self._get_value(detail.weight_losses, index),
-                self._get_value(detail.gas_flows["CO"], index),
-                self._get_value(detail.gas_flows["CO2"], index),
-                self._get_value(detail.gas_flows["N2"], index),
-                self._get_value(detail.gas_flows["H2"], index),
-            ])
+            row = [timestamp]
+            for items in series:
+                if index >= len(items):
+                    row.append(None)  # 该列没有这一行的数据
+                else:
+                    value = items[index]
+                    row.append("无效" if value is None else value)
+            rows.append(row)
         return rows
 
     def _build_rdi_report(self, detail: ExperimentDetailDTO) -> str:
@@ -688,6 +702,3 @@ class ReportExportService:
     def _get_value(items: list[float], index: int, default=None):
         return items[index] if index < len(items) else default
 
-    @staticmethod
-    def _format_series_value(value: float | None, decimals: int) -> str:
-        return "无效" if value is None else f"{value:.{decimals}f}"
