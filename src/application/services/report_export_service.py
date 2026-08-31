@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 from datetime import datetime
 import math
 from pathlib import Path
@@ -11,6 +10,7 @@ from src.services.gb13241_calculator import ReductionCalculator
 from src.utils.logger import get_logger
 from src.utils.path_manager import PathManager
 from src.utils.audit import audit, AuditCategory, AuditResult
+from src.utils.tabular_exporter import TabularExporter
 
 
 class UnsupportedReportTypeError(ValueError):
@@ -19,6 +19,12 @@ class UnsupportedReportTypeError(ValueError):
 
 class ReportExportService:
     """Handles experiment data export and HTML report generation."""
+
+    DATA_HEADERS = (
+        "时间", "温度(℃)", "重量(g)", "失重(%)",
+        "CO(L/min)", "CO₂(L/min)", "N₂(L/min)", "H₂(L/min)",
+    )
+    tabular_exporter = TabularExporter
 
     _EQUIPMENT_LOOP = ("{% for item in equipment %}\n            <tr>\n                <td>{{ loop.index }}</td>\n"
                        "                <td>{{ item.name }}</td>\n                <td>{{ item.model }}</td>\n"
@@ -103,78 +109,47 @@ class ReportExportService:
         return detail
 
     def _export_csv(self, detail: ExperimentDetailDTO, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", newline="", encoding="utf-8-sig") as handle:
-            writer = csv.writer(handle)
-            writer.writerow(["实验信息"])
-            writer.writerow(["实验名称", detail.experiment_name])
-            writer.writerow(["样品名称", detail.sample_name])
-            writer.writerow(["样品重量(g)", detail.sample_weight])
-            writer.writerow(["开始时间", detail.start_time])
-            writer.writerow(["结束时间", detail.end_time or ""])
-            writer.writerow(["描述", detail.description])
-            writer.writerow([])
-            writer.writerow(["时间", "温度(℃)", "重量(g)", "失重(%)", "CO(L/min)", "CO₂(L/min)", "N₂(L/min)", "H₂(L/min)"])
-            for row in self._iter_series_rows(detail):
-                writer.writerow(row)
+        self.tabular_exporter.write_csv(path, self._combined_export_rows(detail))
 
     def _export_txt(self, detail: ExperimentDetailDTO, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", encoding="utf-8") as handle:
-            handle.write("实验信息:\n")
-            handle.write(f"实验名称: {detail.experiment_name}\n")
-            handle.write(f"样品名称: {detail.sample_name}\n")
-            handle.write(f"样品重量: {detail.sample_weight}g\n")
-            handle.write(f"开始时间: {detail.start_time}\n")
-            handle.write(f"结束时间: {detail.end_time or ''}\n")
-            handle.write(f"描述: {detail.description}\n\n")
-            handle.write("时间\t温度(℃)\t重量(g)\t失重(%)\tCO(L/min)\tCO₂(L/min)\tN₂(L/min)\tH₂(L/min)\n")
-            for row in self._iter_series_rows(detail):
-                handle.write(
-                    f"{row[0]}\t{row[1]:.1f}\t"
-                    f"{self._format_series_value(row[2], 4)}\t"
-                    f"{self._format_series_value(row[3], 2)}\t"
-                    f"{row[4]:.2f}\t{row[5]:.2f}\t{row[6]:.2f}\t{row[7]:.2f}\n"
-                )
+        self.tabular_exporter.write_text(path, self._combined_export_rows(detail))
 
     def _export_xlsx(self, detail: ExperimentDetailDTO, path: Path) -> None:
-        import pandas as pd
-
-        path.parent.mkdir(parents=True, exist_ok=True)
-        info_df = pd.DataFrame(
+        self.tabular_exporter.write_xlsx(
+            path,
             {
-                "项目": ["实验名称", "样品名称", "样品重量(g)", "开始时间", "结束时间", "描述", "操作员", "实验类型"],
-                "内容": [
-                    detail.experiment_name,
-                    detail.sample_name,
-                    detail.sample_weight,
-                    detail.start_time,
-                    detail.end_time or "",
-                    detail.description,
-                    detail.operator,
-                    detail.experiment_type,
-                ],
-            }
+                "实验信息": [["项目", "内容"], *self._experiment_info_rows(detail)],
+                "实验数据": [list(self.DATA_HEADERS), *self._iter_series_rows(detail)],
+            },
+            header_rows={"实验信息": 1, "实验数据": 1},
         )
-        data_df = pd.DataFrame(
-            {
-                "时间": detail.timestamps,
-                "温度(℃)": detail.temperatures,
-                "重量(g)": detail.weights,
-                "失重(%)": detail.weight_losses,
-                "CO(L/min)": detail.gas_flows["CO"],
-                "CO₂(L/min)": detail.gas_flows["CO2"],
-                "N₂(L/min)": detail.gas_flows["N2"],
-                "H₂(L/min)": detail.gas_flows["H2"],
-            }
-        )
-        with pd.ExcelWriter(path) as writer:
-            info_df.to_excel(writer, sheet_name="实验信息", index=False)
-            data_df.to_excel(writer, sheet_name="实验数据", index=False)
 
-    def _iter_series_rows(self, detail: ExperimentDetailDTO):
+    def _combined_export_rows(self, detail: ExperimentDetailDTO) -> list[list]:
+        return [
+            ["项目", "内容"],
+            *self._experiment_info_rows(detail),
+            [],
+            list(self.DATA_HEADERS),
+            *self._iter_series_rows(detail),
+        ]
+
+    @staticmethod
+    def _experiment_info_rows(detail: ExperimentDetailDTO) -> list[list]:
+        return [
+            ["实验名称", detail.experiment_name],
+            ["样品名称", detail.sample_name],
+            ["样品重量(g)", detail.sample_weight],
+            ["开始时间", detail.start_time],
+            ["结束时间", detail.end_time or ""],
+            ["描述", detail.description],
+            ["操作员", detail.operator],
+            ["实验类型", detail.experiment_type],
+        ]
+
+    def _iter_series_rows(self, detail: ExperimentDetailDTO) -> list[list]:
+        rows = []
         for index, timestamp in enumerate(detail.timestamps):
-            yield [
+            rows.append([
                 timestamp,
                 self._get_value(detail.temperatures, index),
                 self._get_value(detail.weights, index),
@@ -183,7 +158,8 @@ class ReportExportService:
                 self._get_value(detail.gas_flows["CO2"], index),
                 self._get_value(detail.gas_flows["N2"], index),
                 self._get_value(detail.gas_flows["H2"], index),
-            ]
+            ])
+        return rows
 
     def _build_rdi_report(self, detail: ExperimentDetailDTO) -> str:
         report = self._load_template("iron_ore_rdi_report_template.html")
@@ -562,7 +538,7 @@ class ReportExportService:
         return "未测得" if value is None else f"{value:.{decimals}f}"
 
     @staticmethod
-    def _get_value(items: list[float], index: int, default: float = 0.0) -> float:
+    def _get_value(items: list[float], index: int, default=None):
         return items[index] if index < len(items) else default
 
     @staticmethod
