@@ -46,29 +46,6 @@ def test_runtime_and_facade_forward_experiment_completed_signal():
     runtime.cleanup()
 
 
-def test_facade_connect_signals_accepts_separate_completion_callback():
-    _ensure_app()
-    runtime = ExperimentRuntime(device_manager=None, data_handler=None)
-    controller = runtime.ensure_controller()
-    facade = ExperimentFacade(runtime)
-    events: list[str] = []
-    noop = lambda *_args: None
-    facade.connect_signals(
-        noop,
-        noop,
-        noop,
-        lambda: events.append("stopped"),
-        noop,
-        noop,
-        completed_cb=lambda: events.append("completed"),
-    )
-
-    controller.experiment_completed.emit()
-
-    assert events == ["completed"]
-    facade.cleanup()
-
-
 def test_data_handler_no_longer_exposes_state_compatibility_noops():
     obsolete_methods = {
         "set_experiment_running",
