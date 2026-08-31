@@ -533,7 +533,7 @@ class DeviceManager:
             if nested is not None:
                 timestamps.append(nested)
         return max(timestamps) if timestamps else None
-    
+
     def _validate_mfc_data_for_device(self, device):
         """验证MFC设备数据有效性"""
         if not device:

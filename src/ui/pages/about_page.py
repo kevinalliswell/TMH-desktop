@@ -111,7 +111,7 @@ class AboutPage(QWidget):
         self.version_label.setObjectName("aboutVersion")
         self.version_label.setAlignment(Qt.AlignCenter)
         header_layout.addWidget(self.version_label)
-        
+
         layout.addWidget(header_frame)
 
     def create_update_card(self, layout):
