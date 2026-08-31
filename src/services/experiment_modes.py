@@ -123,7 +123,7 @@ class ExperimentModeManager:
                 stage=ExperimentStage.COOLING,
                 gas_settings=GasSettings(N2=5.0, total_flow=5.0),
                 target_temp=25.0,
-                temp_tolerance=0.0,
+                temp_tolerance=5.0,
                 duration=0,  # 动态时间，自然冷却
                 heating_rate=-10.0,  # 负值表示冷却
                 description="N₂保护冷却至室温"
@@ -163,7 +163,7 @@ class ExperimentModeManager:
                 stage=ExperimentStage.COOLING,
                 gas_settings=GasSettings(N2=5.0, total_flow=5.0),
                 target_temp=25.0,
-                temp_tolerance=0.0,
+                temp_tolerance=5.0,
                 duration=0,
                 heating_rate=-10.0,
                 description="N₂保护冷却至室温"
@@ -203,7 +203,7 @@ class ExperimentModeManager:
                 stage=ExperimentStage.COOLING,
                 gas_settings=GasSettings(N2=5.0, total_flow=5.0),
                 target_temp=50.0,
-                temp_tolerance=0.0,
+                temp_tolerance=5.0,
                 duration=0,
                 heating_rate=-10.0,
                 description="N₂保护冷却至50℃"
@@ -269,8 +269,12 @@ class ExperimentModeManager:
         if not current_settings:
             return False
         
-        # 检查温度条件
-        temp_ok = abs(current_temp - current_settings.target_temp) <= current_settings.temp_tolerance
+        # Cooling is complete once the temperature is below the upper limit.
+        # A symmetric band would reject temperatures below the target again.
+        if current_settings.stage is ExperimentStage.COOLING:
+            temp_ok = current_temp <= current_settings.target_temp + current_settings.temp_tolerance
+        else:
+            temp_ok = abs(current_temp - current_settings.target_temp) <= current_settings.temp_tolerance
         
         # 检查时间条件
         time_ok = True
