@@ -187,6 +187,12 @@ class DeviceManager:
         temp_device = self.get_device("Temp")
         if temp_device:
             temp_data = temp_device.get_data()
+            # 断线后 get_data() 会无限期返回 _last_valid_data 缓存；控制路径
+            # （阶段推进判定、监控面板）必须拒绝陈旧数据，否则温度看门狗会被
+            # 冻结的读数掩盖。
+            if temp_data and not self._has_fresh_device_data(temp_device, temp_data):
+                self.logger.warning("温度数据已过期，本次采集丢弃该帧")
+                temp_data = None
             if temp_data:
                 model = getattr(temp_device, "model", "TEMP-CTRL")
                 meta = {}
@@ -204,6 +210,9 @@ class DeviceManager:
         balance_device = self.get_device("Balance")
         if balance_device:
             weight_data = balance_device.get_data()
+            if weight_data and not self._has_fresh_device_data(balance_device, weight_data):
+                self.logger.warning("天平数据已过期，本次采集丢弃该帧")
+                weight_data = None
             if weight_data:
                 model = getattr(balance_device, "model", "BALANCE-1200")
                 meta = {}

@@ -660,11 +660,9 @@ class ExperimentController(QObject):
 
             if success:
                 continue
-            if not is_connected:
-                self.logger.info(
-                    f"开发模式：跳过 {gas} 流量设置 ({flow:.1f}L/min)"
-                )
-                continue
+            # 无论设备当前是否被判定为已连接，未确认的气体设定一律视为失败：
+            # is_connected 来自设备实时健康状态，真实断线与开发环境无法区分，
+            # 曾经的“开发模式跳过”会让实验带着错误气氛继续运行。
             failed_gases.append(gas)
         return failed_gases
 
@@ -1244,6 +1242,16 @@ class ExperimentController(QObject):
         finally:
             self._manual_initial_weight_in_progress = False
     
+    def apply_safety_atmosphere(self) -> tuple[bool, str]:
+        """公开的保护气氛入口，供实验流程之外的路径（如实验重置）复用。
+
+        实验流程内部继续调用 ``_set_safety_atmosphere``；此处只是把同一份
+        已校验的实现暴露出去，避免再出现第二份不检查返回值的吹扫代码。
+        """
+        if self._set_safety_atmosphere():
+            return True, "已切换到N₂保护气氛"
+        return False, self._last_safety_error
+
     def _set_safety_atmosphere(self) -> bool:
         """设置安全气氛，并对每个失败通道进行有限重试。"""
         targets = (
