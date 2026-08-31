@@ -20,7 +20,7 @@ from src.utils.password_manager import PasswordManager
 from src.services.gb13241_calculator import ReductionCalculator
 from src.services.gb13242_calculator import LowTempDegradationCalculator
 from src.services.gb13240_calculator import FreeExpansionCalculator
-from src.ui.dialogs.rdi_analysis_dialog import RDIAnalysisDialog
+from src.ui.dialogs.rdi_analysis_dialog import RDIAnalysisDialog, suggest_drum_sample_weight
 
 
 class HistoryQuery(QWidget):
@@ -751,22 +751,37 @@ class HistoryQuery(QWidget):
         """分析低温粉化实验 (RDI) 数据"""
         self.logger.info(f"开始为实验 '{experiment_name}' (ID: {experiment_id}) 进行RDI分析参数输入。")
 
-        initial_weight_g = self.current_experiment.get("sample_weight")
-        if initial_weight_g is None or float(initial_weight_g) <= 0:
+        try:
+            initial_weight_g = float(self.current_experiment.get("sample_weight"))
+        except (TypeError, ValueError):
+            initial_weight_g = 0.0
+        if initial_weight_g <= 0:
             QMessageBox.critical(self, "参数错误", f"实验 '{experiment_name}' 的初始样品重量无效或未记录，无法计算RDI。")
             self.logger.error(f"RDI分析中止: 实验 {experiment_id} 初始重量无效: {initial_weight_g}")
             return
-        initial_weight_g = float(initial_weight_g)
+
+        suggested_drum_mass = suggest_drum_sample_weight(data_points, initial_weight_g)
 
         # 使用新的RDI分析对话框
         dialog = RDIAnalysisDialog(experiment_name=experiment_name, 
-                                   initial_weight_g=initial_weight_g, 
+                                   initial_weight_g=initial_weight_g,
+                                   drum_sample_weight_g=suggested_drum_mass,
                                    parent=self)
         if not dialog.exec():
             self.logger.info(f"用户取消为实验 {experiment_id} 输入RDI筛分数据。")
             return
         
-        sieve_data = dialog.get_data()
+        dialog_data = dialog.get_data()
+        drum_sample_weight_g = dialog_data.get('drum_sample_weight_g', 0.0)
+        sieve_data = {
+            key: dialog_data.get(key, 0.0)
+            for key in (
+                'mass_gt_6_3',
+                'mass_3_15_to_6_3',
+                'mass_0_5_to_3_15',
+                'mass_lt_0_5',
+            )
+        }
         mass_gt_6_3 = sieve_data.get('mass_gt_6_3', 0.0)
         mass_3_15_to_6_3 = sieve_data.get('mass_3_15_to_6_3', 0.0)
         mass_0_5_to_3_15 = sieve_data.get('mass_0_5_to_3_15', 0.0)
@@ -782,12 +797,12 @@ class HistoryQuery(QWidget):
 
         total_sieved_mass = sum(sieve_weights_for_calc.values()) # Re-calculate for logging and display
 
-        self.logger.info(f"RDI分析输入 (来自对话框): 初始重={initial_weight_g}g, >6.3mm={mass_gt_6_3}g, +3.15-6.3mm={mass_3_15_to_6_3}g, +0.5-3.15mm={mass_0_5_to_3_15}g, <0.5mm={mass_lt_0_5}g, 总筛分={total_sieved_mass}g")
+        self.logger.info(f"RDI分析输入 (来自对话框): 初始重={initial_weight_g}g, 入鼓重={drum_sample_weight_g}g, >6.3mm={mass_gt_6_3}g, +3.15-6.3mm={mass_3_15_to_6_3}g, +0.5-3.15mm={mass_0_5_to_3_15}g, <0.5mm={mass_lt_0_5}g, 总筛分={total_sieved_mass}g")
 
         try:
             calculator = LowTempDegradationCalculator()
             rdi_indices = calculator.calculate_rdi(
-                initial_weight=initial_weight_g,
+                drum_sample_weight=drum_sample_weight_g,
                 sieve_weights=sieve_weights_for_calc
             )
 
@@ -798,12 +813,14 @@ class HistoryQuery(QWidget):
             # 合并原始输入筛分质量和计算得到的RDI指数，以便一起保存和报告
             combined_rdi_results = {
                 'initial_sample_weight_g': initial_weight_g,
+                'drum_sample_weight_g': drum_sample_weight_g,
                 'sieve_input_masses': sieve_data, # sieve_data from dialog (mass_gt_6_3, etc.)
                 'calculated_rdi_indices': rdi_indices # RDI+6.3, RDI+3.15, RDI-0.5
             }
 
             result_text = f"实验: {experiment_name} (ID: {experiment_id})\n分析结果 (低温粉化指数 RDI):\n\n"
             result_text += f"  初始样品质量: {initial_weight_g:.2f} g\n"
+            result_text += f"  入鼓试样质量: {drum_sample_weight_g:.2f} g\n"
             result_text += f"  筛后总回收质量: {total_sieved_mass:.2f} g\n\n"
             result_text += "输入筛分质量:\n"
             result_text += f"    >6.3mm: {mass_gt_6_3:.2f} g\n"

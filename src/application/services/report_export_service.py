@@ -209,7 +209,11 @@ class ReportExportService:
 
         sieve_inputs = self._get_val(analysis, "sieve_input_masses", {})
         rdi_indices = self._get_val(analysis, "calculated_rdi_indices", {})
-        init_mass = float(self._get_val(analysis, "initial_sample_weight_g", detail.sample_weight or 500.0))
+        drum_mass = float(self._get_val(
+            analysis,
+            "drum_sample_weight_g",
+            self._get_val(analysis, "initial_sample_weight_g", detail.sample_weight or 500.0),
+        ))
         plus_3_15 = self._get_val(sieve_inputs, "mass_gt_6_3", 0.0) + self._get_val(sieve_inputs, "mass_3_15_to_6_3", 0.0)
         minus_3_15 = self._get_val(sieve_inputs, "mass_0_5_to_3_15", 0.0)
         minus_0_5 = self._get_val(sieve_inputs, "mass_lt_0_5", 0.0)
@@ -222,7 +226,7 @@ class ReportExportService:
         rdi_minus_3_15_text = self._format_optional_number(rdi_minus_3_15)
         rdi_0_5_text = self._format_optional_number(rdi_0_5)
 
-        results_html = (f"<tr><td>1</td><td>{init_mass:.2f}</td><td>{plus_3_15:.2f}</td>"
+        results_html = (f"<tr><td>1</td><td>{drum_mass:.2f}</td><td>{plus_3_15:.2f}</td>"
                         f"<td>{minus_3_15:.2f}</td><td>{minus_0_5:.2f}</td>"
                         f"<td>{rdi_minus_3_15_text}</td><td>{rdi_0_5_text}</td></tr>\n")
         report = report.replace(

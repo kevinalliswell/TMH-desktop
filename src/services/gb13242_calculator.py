@@ -10,12 +10,12 @@ class LowTempDegradationCalculator:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         
-    def calculate_rdi(self, initial_weight: float, sieve_weights: Dict[float, float]) -> Dict[str, float]:
+    def calculate_rdi(self, drum_sample_weight: float, sieve_weights: Dict[float, float]) -> Dict[str, float]:
         """
         计算低温粉化指数
         
         Args:
-            initial_weight: 初始重量 (g)
+            drum_sample_weight: 还原后装入转鼓的试样质量 m0 (g)
             sieve_weights: 各筛分重量字典，键为筛孔尺寸(mm)，值为重量(g)
             
         Returns:
@@ -28,8 +28,8 @@ class LowTempDegradationCalculator:
         - RDI-0.5: <0.5mm颗粒重量百分比
         """
         try:
-            if initial_weight <= 0:
-                raise ValueError("初始重量必须大于0")
+            if drum_sample_weight <= 0:
+                raise ValueError("入鼓试样质量必须大于0")
                 
             # 计算各指标
             weight_above_6_3 = sum(w for size, w in sieve_weights.items() if size > 6.3)
@@ -38,10 +38,10 @@ class LowTempDegradationCalculator:
             weight_below_0_5 = sum(w for size, w in sieve_weights.items() if size < 0.5)
             
             rdi = {
-                'RDI+6.3': round(weight_above_6_3 / initial_weight * 100, 2),
-                'RDI+3.15': round(weight_above_3_15 / initial_weight * 100, 2),
-                'RDI-3.15': round(weight_below_3_15 / initial_weight * 100, 2),
-                'RDI-0.5': round(weight_below_0_5 / initial_weight * 100, 2)
+                'RDI+6.3': round(weight_above_6_3 / drum_sample_weight * 100, 2),
+                'RDI+3.15': round(weight_above_3_15 / drum_sample_weight * 100, 2),
+                'RDI-3.15': round(weight_below_3_15 / drum_sample_weight * 100, 2),
+                'RDI-0.5': round(weight_below_0_5 / drum_sample_weight * 100, 2)
             }
             
             return rdi
