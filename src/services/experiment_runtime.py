@@ -13,6 +13,7 @@ class ExperimentRuntime(QObject):
     safety_alert = Signal(str)
     experiment_started = Signal()
     experiment_stopped = Signal()
+    experiment_completed = Signal()
     experiment_time_updated = Signal(str)
     stage_info_updated = Signal(dict)
     state_changed = Signal(object)  # 转发状态机 state_changed 信号
@@ -40,6 +41,16 @@ class ExperimentRuntime(QObject):
 
     def ensure_controller(self, confirm_callback=None, input_double_callback=None):
         """创建或获取实验控制器，并注入 UI 交互回调。"""
+        controller = self._ensure_controller_created()
+        if confirm_callback or input_double_callback:
+            controller.set_interaction_callbacks(
+                confirm_callback=confirm_callback,
+                input_double_callback=input_double_callback,
+            )
+        return controller
+
+    def _ensure_controller_created(self):
+        """Create the controller once and establish all runtime signal bridges."""
         if self._controller is None:
             self._controller = self._create_controller()
             # 将状态机注入到 DataHandler，让其直接查询状态
@@ -47,11 +58,6 @@ class ExperimentRuntime(QObject):
                 self.data_handler.set_state_machine(self._controller.state_machine)
         if not self._signals_connected:
             self._connect_signals()
-        if confirm_callback or input_double_callback:
-            self._controller.set_interaction_callbacks(
-                confirm_callback=confirm_callback,
-                input_double_callback=input_double_callback,
-            )
         return self._controller
 
     def get_controller(self):
@@ -59,13 +65,7 @@ class ExperimentRuntime(QObject):
         return self._controller
 
     def _require_controller(self):
-        if self._controller is None:
-            self._controller = self._create_controller()
-            if self.data_handler and hasattr(self._controller, 'state_machine'):
-                self.data_handler.set_state_machine(self._controller.state_machine)
-        if not self._signals_connected:
-            self._connect_signals()
-        return self._controller
+        return self._ensure_controller_created()
 
     def _create_controller(self):
         return ExperimentController(
@@ -89,6 +89,7 @@ class ExperimentRuntime(QObject):
         self._controller.safety_alert.connect(self.safety_alert)
         self._controller.experiment_started.connect(self.experiment_started)
         self._controller.experiment_stopped.connect(self.experiment_stopped)
+        self._controller.experiment_completed.connect(self.experiment_completed)
         self._controller.experiment_time_updated.connect(self.experiment_time_updated)
         self._controller.stage_info_updated.connect(self.stage_info_updated)
         # 转发状态机信号
@@ -105,6 +106,7 @@ class ExperimentRuntime(QObject):
             self._controller.safety_alert.disconnect(self.safety_alert)
             self._controller.experiment_started.disconnect(self.experiment_started)
             self._controller.experiment_stopped.disconnect(self.experiment_stopped)
+            self._controller.experiment_completed.disconnect(self.experiment_completed)
             self._controller.experiment_time_updated.disconnect(self.experiment_time_updated)
             self._controller.stage_info_updated.disconnect(self.stage_info_updated)
             self._controller.state_machine.state_changed.disconnect(self.state_changed)
@@ -144,7 +146,8 @@ class ExperimentRuntime(QObject):
         return self._require_controller().is_experiment_running()
 
     def get_experiment_data(self):
-        return self._require_controller().get_experiment_data()
+        controller = self.get_controller()
+        return controller.current_experiment if controller else None
 
     def get_initial_weight(self) -> float:
         controller = self.get_controller()

@@ -158,11 +158,6 @@ class DataHandler(QObject):
         """启动设备监控线程（兼容原有接口）"""
         self.start()
 
-    def start_save_db_thread(self):
-        """启动数据库保存线程（兼容原有接口）"""
-        # 该功能已在start()中包含，这里仅为兼容性
-        pass
-    
     def set_state_machine(self, state_machine):
         """设置集中式状态机引用"""
         self._sm = state_machine
@@ -195,26 +190,6 @@ class DataHandler(QObject):
             return self._sm.get_state().initial_weight
         return 0.0
 
-    # -- 兼容旧接口（保留方法签名，内部不再维护状态副本） --
-
-    def set_experiment_running(self, running: bool, experiment_id: str = None):
-        """兼容旧接口：状态已由状态机管理，此处仅记录日志"""
-        self.logger.info(f"[兼容] set_experiment_running({running}, {experiment_id}) — 状态由状态机管理")
-    
-    def set_experiment_start_time(self, start_time: float):
-        """兼容旧接口：状态已由状态机管理"""
-        self.logger.info(f"[兼容] set_experiment_start_time({start_time}) — 状态由状态机管理")
-    
-    def set_initial_weight(self, weight: float):
-        """兼容旧接口：状态已由状态机管理"""
-        self.logger.info(f"[兼容] set_initial_weight({weight}g) — 状态由状态机管理")
-    
-    def stop_save_db_thread(self):
-        """停止数据库保存线程（兼容原有接口）"""
-        # 该功能已在stop()中包含，这里仅为兼容性
-        self.logger.info("停止数据库保存线程")
-        pass
-    
     def stop(self):
         """停止数据处理与保存"""
         if not self.is_running:

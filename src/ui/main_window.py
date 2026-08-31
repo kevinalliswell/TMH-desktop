@@ -198,7 +198,7 @@ class MainWindow(QMainWindow):
         self.experiment_mode_settings_page = ExperimentModeSettingsPage(
             parent=self,
             mode_manager=self.ui_dependencies.experiment_mode_manager,
-            gas_safety_limits=self.runtime_services.communication_config.mfc.gas_safety_limits,
+            gas_safety_limits_provider=self._get_runtime_gas_safety_limits,
         )
         self.experiment_mode_settings_page.mode_created.connect(
             self._on_experiment_modes_changed
@@ -235,7 +235,9 @@ class MainWindow(QMainWindow):
         if not self.runtime.apply_comm_settings():
             return False
         self.runtime_services = self.runtime.services
-        self.ui_dependencies = self._build_ui_dependencies()
+        self.ui_dependencies.experiment_api = ExperimentFacade(
+            self.runtime_services.experiment_runtime
+        )
         if self.integrated_control_page:
             self.integrated_control_page.rebind_runtime(
                 self.runtime_services.device_manager,
@@ -246,6 +248,12 @@ class MainWindow(QMainWindow):
                 experiment_type_manager=self.ui_dependencies.experiment_type_manager,
             )
         return True
+
+    def _get_runtime_gas_safety_limits(self) -> dict:
+        """Read gas limits from the currently active runtime configuration."""
+        return dict(
+            self.runtime.services.communication_config.mfc.gas_safety_limits
+        )
 
     def _on_experiment_modes_changed(self, *_args) -> None:
         """Synchronously refresh every view of experiment_modes.json."""
