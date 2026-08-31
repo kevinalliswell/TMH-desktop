@@ -35,6 +35,9 @@ class SerialCommand:
         self.started = threading.Event()
         self.cancelled = threading.Event()
         self.completed = threading.Event()
+        # True 表示命令根本没被派发到串口（排队超时/关停取消），
+        # 与“设备收到了但没应答”是不同的故障，调用方需要区分。
+        self.dispatch_failed = False
 
     def try_start(self) -> bool:
         """Mark the command started unless its caller already cancelled it."""
@@ -347,21 +350,41 @@ class MultiMFCClient(BaseDevice):
 
     def _command_execution_timeout(self, command: SerialCommand) -> float:
         """Upper bound for all serial attempts after a command starts."""
+        return self._worst_case_execution_time(command.timeout)
+
+    def _worst_case_execution_time(self, per_attempt_timeout: float) -> float:
+        """How long one command can occupy the executor, retries included."""
         per_attempt_overhead = 0.1
         return (
-            self.MAX_RETRIES * (command.timeout + per_attempt_overhead)
+            self.MAX_RETRIES * (per_attempt_timeout + per_attempt_overhead)
             + max(0, self.MAX_RETRIES - 1) * self.RETRY_DELAY
             + 0.25
         )
 
+    def _queue_wait_timeout(self, command: SerialCommand) -> float:
+        """How long to wait for dispatch.
+
+        Must cover the worst case already in flight, not this command's own
+        timeout: the processor is not sitting on ``queue.get()`` while it runs
+        another command, so priority cannot preempt it. Sizing this from the new
+        command's timeout made a write queued behind a slow read report a
+        hardware failure after 3 s — which the stage logic then escalated into
+        '阶段气体设定失败，实验已中止' on perfectly healthy hardware, and which
+        made the safety purge fail on the exit path so the app refused to close.
+        """
+        in_flight_worst_case = self._worst_case_execution_time(
+            max(self.COMMAND_TIMEOUT, self.WRITE_COMMAND_TIMEOUT)
+        )
+        return max(1.0, command.timeout, in_flight_worst_case)
+
     def _wait_for_command(self, command: SerialCommand) -> bool:
         """Wait for queue dispatch and every retry, cancelling stale queued work."""
-        queue_wait_timeout = max(1.0, command.timeout)
-        if not command.started.wait(timeout=queue_wait_timeout):
+        if not command.started.wait(timeout=self._queue_wait_timeout(command)):
             if command.completed.is_set():
                 return True
             command.cancelled.set()
-            self.logger.warning("命令排队超时，已取消未执行命令")
+            command.dispatch_failed = True
+            self.logger.warning("命令排队超时，已取消未执行命令（设备未收到该指令）")
             return False
 
         if command.completed.wait(timeout=self._command_execution_timeout(command)):
@@ -659,7 +682,12 @@ class MultiMFCClient(BaseDevice):
             
             # 等待排队和完整重试窗口，避免调用方报失败后后台重试又写成功。
             if not self._wait_for_command(command):
-                self.logger.error(f"{gas_type} 流量设定命令超时")
+                if command.dispatch_failed:
+                    self.logger.error(
+                        f"{gas_type} 流量设定命令未能下发（总线繁忙），设备未收到该指令"
+                    )
+                else:
+                    self.logger.error(f"{gas_type} 流量设定命令超时，设备未确认")
                 return False
 
             acknowledgement = self._cpl.parse_write_ack(
