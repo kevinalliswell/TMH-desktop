@@ -146,8 +146,8 @@ class DataHandler(QObject):
         self.stop_event.clear()
         
         # 创建新的线程
-        self.data_thread = threading.Thread(target=self._data_processing_loop, daemon=True)
-        self.db_thread = threading.Thread(target=self._db_saving_loop, daemon=True)
+        self.data_thread = threading.Thread(target=self._data_processing_loop)
+        self.db_thread = threading.Thread(target=self._db_saving_loop)
         
         # 启动线程
         self.data_thread.start()
@@ -231,19 +231,20 @@ class DataHandler(QObject):
             self.db_thread.join(timeout=3.0)
             if self.db_thread.is_alive():
                 self.logger.warning("数据库保存线程未能在预期时间内停止")
+
+        # 数据线程可能在数据库线程执行最终落盘后才放入最后一个样本；
+        # 两个 join 之后由调用线程再兜底落盘一次，关闭程序时也不遗留队列数据。
+        remaining_data = []
+        self._drain_data_buffer(remaining_data)
+        if remaining_data:
+            self._save_data_batch(remaining_data)
+            self._close_thread_db_connection()
         
         # 重置线程和状态
         self.data_thread = None
         self.db_thread = None
         self.is_running = False
         
-        # 清空数据缓冲区
-        while not self.data_buffer.empty():
-            try:
-                self.data_buffer.get_nowait()
-            except queue.Empty:
-                break
-
         self.logger.info("数据处理器已停止")
     
     def _init_database(self):
@@ -324,11 +325,11 @@ class DataHandler(QObject):
                     self.logger.debug(f"实验数据采样: {data}")
                 
                 # 使用设备通信间隔
-                time.sleep(self.data_collection_interval)
+                self.stop_event.wait(self.data_collection_interval)
                 
             except Exception as e:
                 self.logger.error(f"数据处理出错: {str(e)}")
-                time.sleep(1)
+                self.stop_event.wait(1)
 
     def _get_current_snapshot_payload(self):
         """获取当前采样数据，同时更新标准化快照缓存。"""
@@ -354,8 +355,7 @@ class DataHandler(QObject):
             while not self.stop_event.is_set():
                 try:
                     # 获取所有可用数据
-                    while not self.data_buffer.empty():
-                        batch_data.append(self.data_buffer.get_nowait())
+                    self._drain_data_buffer(batch_data)
                     
                     # 检查是否到达保存间隔
                     now = time.time()
@@ -364,15 +364,27 @@ class DataHandler(QObject):
                         batch_data = []
                         last_save_time = now
                     
-                    # 短暂休眠
-                    time.sleep(1)
+                    # 短暂休眠；停止时立即唤醒，以便执行最终落盘。
+                    self.stop_event.wait(1)
                     
                 except Exception as e:
                     self.logger.error(f"数据保存出错: {str(e)}")
-                    time.sleep(1)
+                    self.stop_event.wait(1)
         finally:
+            # 停止信号可能在保存周期到达前触发，必须落盘剩余批次。
+            self._drain_data_buffer(batch_data)
+            if batch_data:
+                self._save_data_batch(batch_data)
             # 线程结束时关闭数据库连接
             self._close_thread_db_connection()
+
+    def _drain_data_buffer(self, batch_data):
+        """将当前队列快照移入批次，避免 Queue.empty() 的竞态。"""
+        while True:
+            try:
+                batch_data.append(self.data_buffer.get_nowait())
+            except queue.Empty:
+                return
     
     def _save_data_batch(self, data_batch):
         """保存一批数据到数据库（增强版：重试机制 + executemany优化）
