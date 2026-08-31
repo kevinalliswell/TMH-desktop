@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import time
 
 from azbil_temp_controller import AzbilControllerDevice, AzbilRs485Bus, SerialPortSettings
+from tmh_comm.protocols.temp_rtu import decode_temperature_register
 
 from src.application.dto import DeviceSnapshot, HealthStatus
 
@@ -111,11 +112,12 @@ class TempControllerClient:
         data.setdefault("timestamp", snapshot.timestamp)
         return data
 
-    def _decode_value(self, raw_value: int) -> float:
-        value = raw_value
-        if self.config.signed_registers and raw_value & 0x8000:
-            value = raw_value - 0x10000
-        return value * self.config.scale
+    def _decode_value(self, raw_value: int) -> float | None:
+        return decode_temperature_register(
+            raw_value,
+            scale=self.config.scale,
+            signed=self.config.signed_registers,
+        )
 
     def _disconnected_snapshot(self, error_message: str) -> DeviceSnapshot:
         return DeviceSnapshot(
@@ -127,4 +129,3 @@ class TempControllerClient:
             is_running=False,
             error_message=error_message,
         )
-

@@ -3,6 +3,24 @@ from __future__ import annotations
 from typing import Dict, Optional
 
 
+FAULT_REGISTER_VALUES = frozenset({0xFFFF})
+
+
+def decode_temperature_register(
+    raw_value: int,
+    *,
+    scale: float = 0.1,
+    signed: bool = True,
+) -> Optional[float]:
+    """Decode one 16-bit temperature register, preserving device faults."""
+    if raw_value in FAULT_REGISTER_VALUES:
+        return None
+    value = raw_value
+    if signed and raw_value & 0x8000:
+        value = raw_value - 0x10000
+    return value * scale
+
+
 def _crc16_modbus(data: bytes) -> bytes:
     crc = 0xFFFF
     for b in data:
@@ -26,7 +44,13 @@ class TempRtuProtocol:
         base = bytes([slave_address, 0x03, 0x00, 0x00, 0x00, 0x09])
         return base + _crc16_modbus(base)
 
-    def parse_read_all(self, response: bytes, *, scale: float = 0.1) -> Dict[str, Optional[float]]:
+    def parse_read_all(
+        self,
+        response: bytes,
+        *,
+        scale: float = 0.1,
+        signed_registers: bool = True,
+    ) -> Dict[str, Optional[float]]:
         # Expected: [addr, func, byte_count, data..., crc_lo, crc_hi]
         if len(response) < 3:
             return {}
@@ -35,7 +59,12 @@ class TempRtuProtocol:
         temps: Dict[str, Optional[float]] = {}
         for i in range(0, min(len(data), 18), 2):
             raw = int.from_bytes(data[i : i + 2], byteorder="big", signed=False)
-            temps[f"T{(i // 2) + 1}"] = raw * scale
+            point = f"T{(i // 2) + 1}"
+            temps[point] = decode_temperature_register(
+                raw,
+                scale=scale,
+                signed=signed_registers,
+            )
         return temps
 
     def extract_read_all(self, buf: bytes, *, slave_address: int) -> Optional[bytes]:
@@ -61,4 +90,3 @@ class TempRtuProtocol:
             if _crc16_modbus(frame[:-2]) == frame[-2:]:
                 return frame
         return None
-
