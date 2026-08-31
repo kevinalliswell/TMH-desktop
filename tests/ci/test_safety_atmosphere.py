@@ -19,6 +19,39 @@ class _FlowDevice:
         self.calls.append((gas, flow))
         return gas not in self.failing_gases
 
+    def get_connection_status(self):
+        return True, "fake devices", ""
+
+
+class _StageFlowDevice(_FlowDevice):
+    def __init__(self, failure_plan=None):
+        super().__init__()
+        self.failure_plan = Counter(failure_plan or {})
+
+    def set_flow(self, gas, flow):
+        self.calls.append((gas, flow))
+        key = (gas, float(flow))
+        if self.failure_plan[key] > 0:
+            self.failure_plan[key] -= 1
+            return False
+        return True
+
+
+def _running_stage_controller(device):
+    controller = ExperimentController(device_manager=device)
+    stage = SimpleNamespace(
+        stage=SimpleNamespace(value="还原"),
+        description="还原阶段",
+        gas_settings={},
+    )
+    controller.experiment_mode_manager.get_current_stage_settings = lambda: stage
+    controller.experiment_mode_manager.get_gas_flow_for_mfc = (
+        lambda settings: {"CO": 4.5, "N2": 10.5}
+    )
+    controller.state_machine.transition_to(ExperimentPhase.CONFIGURING)
+    controller.state_machine.transition_to(ExperimentPhase.RUNNING)
+    return controller
+
 
 def test_safety_atmosphere_retries_and_emits_high_visibility_alert():
     device = _FlowDevice(failing_gases={"CO", "H2"})
@@ -90,3 +123,33 @@ def test_safety_alert_reaches_status_log_and_critical_dialog(monkeypatch):
     )
     critical.assert_called_once_with(view, "气体安全告警", message)
     assert view._current_system_message == message
+
+
+def test_stage_flow_transient_failure_retries_then_continues():
+    device = _StageFlowDevice({("CO", 4.5): 1})
+    controller = _running_stage_controller(device)
+    messages = []
+    controller.system_message_updated.connect(messages.append)
+
+    assert controller.execute_current_experiment_stage() is True
+
+    assert device.calls.count(("CO", 4.5)) == 2
+    assert controller.state_machine.phase == ExperimentPhase.RUNNING
+    assert any("执行阶段: 还原阶段" in message for message in messages)
+
+
+def test_stage_flow_persistent_failure_aborts_before_stage_broadcast():
+    device = _StageFlowDevice({("CO", 4.5): 3})
+    controller = _running_stage_controller(device)
+    alerts = []
+    messages = []
+    controller.safety_alert.connect(alerts.append)
+    controller.system_message_updated.connect(messages.append)
+
+    assert controller.execute_current_experiment_stage() is False
+
+    assert device.calls.count(("CO", 4.5)) == 3
+    assert controller.state_machine.phase == ExperimentPhase.IDLE
+    assert any("阶段气体设定失败" in message for message in messages)
+    assert all("执行阶段: 还原阶段" not in message for message in messages)
+    assert any("CO" in alert and "实验已中止" in alert for alert in alerts)

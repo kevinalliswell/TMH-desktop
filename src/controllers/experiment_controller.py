@@ -33,6 +33,7 @@ class ExperimentController(QObject):
     # 实验常量
     SAFETY_N2_FLOW_LPM = 5.0  # 安全气氛 N2 流量 (L/min)
     SAFETY_FLOW_MAX_ATTEMPTS = 3
+    STAGE_FLOW_MAX_ATTEMPTS = 3
     AMBIENT_TEMP_CELSIUS = 25.0  # 默认环境/起始温度 (°C)
 
     # 信号定义
@@ -407,7 +408,7 @@ class ExperimentController(QObject):
             raise Exception("创建实验记录失败")
         return experiment
 
-    def _begin_experiment_common(self) -> None:
+    def _begin_experiment_common(self) -> bool:
         """实验启动的公共逻辑（提取自 start_experiment 和 _dev_start_experiment）"""
         now = time.time()
         self._sm.transition_to(
@@ -429,7 +430,7 @@ class ExperimentController(QObject):
         self.stage_timer.start(1000)  # 每秒检查一次
 
         # 执行第一个阶段
-        self.execute_current_experiment_stage()
+        return self.execute_current_experiment_stage()
 
     def _get_experiment_display_name(self) -> str:
         """获取实验显示名称（提取公共逻辑）"""
@@ -510,7 +511,14 @@ class ExperimentController(QObject):
             self.experiment_mode_manager.current_stage_index = 0
 
             # 执行公共启动逻辑（内部会转到 RUNNING）
-            self._begin_experiment_common()
+            if not self._begin_experiment_common():
+                audit(
+                    AuditCategory.EXPERIMENT,
+                    "start",
+                    result=AuditResult.FAILURE,
+                    error="initial stage gas flow failed",
+                )
+                return False
             
             # 发送信号
             exp_name = self._get_experiment_display_name()
@@ -562,7 +570,8 @@ class ExperimentController(QObject):
             self.current_experiment = self._create_experiment_record()
 
             # 执行公共启动逻辑（内部会转到 RUNNING）
-            self._begin_experiment_common()
+            if not self._begin_experiment_common():
+                return False
 
             self.logger.info(f"==============================================实验类型: {self.current_experiment_type}")
             
@@ -606,16 +615,16 @@ class ExperimentController(QObject):
         )
         return safety_success
     
-    def execute_current_experiment_stage(self) -> None:
+    def execute_current_experiment_stage(self) -> bool:
         """执行当前实验阶段"""
         if not self._sm.is_running:
-            return
+            return False
         
         current_stage = self.experiment_mode_manager.get_current_stage_settings()
         if not current_stage:
             # 实验完成
             self.complete_experiment()
-            return
+            return True
         
         # 设置气体流量
         gas_flows = self.experiment_mode_manager.get_gas_flow_for_mfc(
@@ -626,12 +635,12 @@ class ExperimentController(QObject):
             connection_status = self.device_manager.get_connection_status()
             is_connected = connection_status[0] if connection_status else False
             
-            for gas, flow in gas_flows.items():
-                result = self.device_manager.set_flow(gas, flow)
-                if not result and not is_connected:
-                    self.logger.info(f"开发模式：跳过 {gas} 流量设置 ({flow:.1f}L/min)")
-                elif not result:
-                    self.logger.warning(f"流量设置失败：{gas} -> {flow:.1f}L/min")
+            failed_gases = self._set_stage_gas_flows(gas_flows, is_connected)
+            if failed_gases:
+                return self._abort_stage_for_flow_failure(
+                    current_stage,
+                    failed_gases,
+                )
         
         # 更新状态显示
         stage_name = f"{current_stage.stage.value}-{current_stage.description}"
@@ -647,13 +656,76 @@ class ExperimentController(QObject):
         
         self.logger.info(f"执行阶段: {current_stage.description}")
         self.logger.info(f"气体设置: {gas_flows}")
-        
-        # 通过状态机更新阶段开始时间和阶段索引
+
+        # 仅在阶段气氛全部确认后同步状态机；失败路径已中止实验。
         self._sm.update_state_silent(
             stage_start_time=time.time(),
             current_stage_index=self.experiment_mode_manager.current_stage_index,
             total_stages=len(self.experiment_mode_manager.get_experiment_stages()),
         )
+        return True
+
+    def _set_stage_gas_flows(self, gas_flows: dict, is_connected: bool) -> list[str]:
+        """Apply a stage atmosphere, retrying confirmed hardware failures."""
+        failed_gases = []
+        for gas, flow in gas_flows.items():
+            attempts = self.STAGE_FLOW_MAX_ATTEMPTS if is_connected else 1
+            success = False
+            for attempt in range(1, attempts + 1):
+                try:
+                    success = bool(self.device_manager.set_flow(gas, flow))
+                except Exception as exc:
+                    self.logger.error(
+                        f"阶段气体设定异常：{gas} -> {flow:.1f}L/min，"
+                        f"第 {attempt} 次尝试：{exc}",
+                        exc_info=True,
+                    )
+                    success = False
+                if success:
+                    break
+                if is_connected:
+                    self.logger.warning(
+                        f"阶段气体设定失败：{gas} -> {flow:.1f}L/min，"
+                        f"第 {attempt}/{attempts} 次尝试"
+                    )
+
+            if success:
+                continue
+            if not is_connected:
+                self.logger.info(
+                    f"开发模式：跳过 {gas} 流量设置 ({flow:.1f}L/min)"
+                )
+                continue
+            failed_gases.append(gas)
+        return failed_gases
+
+    def _abort_stage_for_flow_failure(self, current_stage, failed_gases: list[str]) -> bool:
+        failed_text = "、".join(failed_gases)
+        alert_message = (
+            f"阶段气体设定失败（阶段：{current_stage.description}；通道：{failed_text}），"
+            "实验已中止。请检查气路与设备连接，确认安全气氛后再操作。"
+        )
+        self.logger.critical(alert_message)
+        self.status_updated.emit("实验已中止-阶段气体设定失败")
+        self.system_message_updated.emit(alert_message)
+        self.safety_alert.emit(alert_message)
+        safety_success = self._finish_experiment_common(
+            "实验已中止",
+            f"{alert_message} 已切换到N₂保护。",
+            via_phase=ExperimentPhase.STOPPING,
+        )
+        self.experiment_stopped.emit()
+        audit(
+            AuditCategory.GAS,
+            "stage_flow",
+            result=AuditResult.FAILURE,
+            operator=self.experiment_params.get("operator") if self.experiment_params else None,
+            experiment_id=getattr(self.current_experiment, "experiment_id", None),
+            stage=getattr(current_stage, "description", ""),
+            failed_gases=failed_gases,
+            safety_atmosphere=safety_success,
+        )
+        return False
     
     def get_sample_temperature(self) -> float:
         """
