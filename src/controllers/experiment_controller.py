@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Optional, Callable, Tuple
 from PySide6.QtCore import QObject, Signal, QTimer
 
+from src.domain.experiment.clock import EXPERIMENT_CLOCK
 from src.models.experiment_state import (
     ExperimentStateMachine,
     ExperimentPhase,
@@ -38,6 +39,9 @@ class ExperimentController(QObject):
     SAFETY_FLOW_MAX_ATTEMPTS = 3
     STAGE_FLOW_MAX_ATTEMPTS = 3
     TEMP_READ_FAILURE_ALERT_THRESHOLD = 3
+    # 实验/阶段计时时钟。与 DataHandler._elapsed_clock 同源，见
+    # src/domain/experiment/clock.py；两者必须是同一个对象。
+    _clock = staticmethod(EXPERIMENT_CLOCK)
     AMBIENT_TEMP_CELSIUS = 25.0  # 默认环境/起始温度 (°C)
 
     # 信号定义
@@ -101,7 +105,6 @@ class ExperimentController(QObject):
         self._temperature_read_failures = 0
         self._temperature_fault_alerted = False
         self._initial_weight_source = None
-        self._clock = time.monotonic
         self._manual_initial_weight_in_progress = False
         
         # 初始化定时器
