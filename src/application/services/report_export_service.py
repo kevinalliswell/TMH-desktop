@@ -348,8 +348,10 @@ class ReportExportService:
 
     def _calculate_reducibility_metrics(self, detail: ExperimentDetailDTO) -> dict[str, float | None]:
         analysis = detail.analysis_results if isinstance(detail.analysis_results, dict) else {}
-        oxygen_content = self._percentage_or_none(
-            analysis.get("oxygen_content", analysis.get("oxygen_content_percentage"))
+        total_iron_content = self._percentage_or_none(analysis.get("total_iron_content"))
+        feo_content = self._percentage_or_none(analysis.get("feo_content"))
+        initial_sample_weight = self._number_or_none(
+            analysis.get("initial_sample_weight", detail.sample_weight)
         )
         co_flows = detail.gas_flows.get("CO", []) if isinstance(detail.gas_flows, dict) else []
         data_points = []
@@ -364,7 +366,9 @@ class ReportExportService:
 
         calculated = ReductionCalculator().analyze_experiment_data(
             data_points,
-            oxygen_content=oxygen_content,
+            total_iron_content=total_iron_content,
+            feo_content=feo_content,
+            initial_sample_weight=initial_sample_weight,
         )
         metrics = {
             "mass_before": self._number_or_none(calculated.get("initial_weight")),

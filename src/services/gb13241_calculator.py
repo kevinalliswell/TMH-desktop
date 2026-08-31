@@ -11,36 +11,50 @@ class ReductionCalculator:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         
-    def calculate_reduction_degree(self, initial_weight: float, current_weight: float,
-                                 oxygen_content: float) -> Optional[float]:
+    def calculate_reduction_degree(
+        self,
+        initial_weight: float,
+        current_weight: float,
+        total_iron_content: float,
+        feo_content: float,
+    ) -> Optional[float]:
         """
         计算还原度
         
         Args:
             initial_weight: 初始重量 (g)
             current_weight: 当前重量 (g)
-            oxygen_content: 氧含量 (%)
+            total_iron_content: 全铁含量 w(TFe) (%)
+            feo_content: 氧化亚铁含量 w(FeO) (%)
             
         Returns:
             float: 还原度 (%)，计算失败返回None
             
-        公式：Rt = (ΔW / (W0 * O2%)) * 100%
-        其中：
-        - Rt: t时刻的还原度
-        - ΔW: 失重量
-        - W0: 初始重量
-        - O2%: 氧含量百分比
+        公式：Rt = [0.111·w(FeO)/(0.430·w(TFe))
+                    + (m0-mt)/(m0·0.430·w(TFe))] × 100%
         """
         try:
-            if initial_weight <= 0 or oxygen_content <= 0:
-                raise ValueError("初始重量和氧含量必须大于0")
-                
-            weight_loss = initial_weight - current_weight
-            # oxygen_content is expressed as a percentage (e.g. 28.5 for 28.5%),
-            # so convert it to a fraction before computing the removable-oxygen mass.
-            # Rt = ΔW / (W0 * O2fraction) * 100%
-            oxygen_fraction = oxygen_content / 100.0
-            reduction_degree = (weight_loss / (initial_weight * oxygen_fraction)) * 100
+            initial_weight = float(initial_weight)
+            current_weight = float(current_weight)
+            total_iron_content = float(total_iron_content)
+            feo_content = float(feo_content)
+            values = (initial_weight, current_weight, total_iron_content, feo_content)
+            if not all(math.isfinite(value) for value in values):
+                raise ValueError("还原度输入必须是有限数值")
+            if initial_weight <= 0 or not 0 < total_iron_content <= 100:
+                raise ValueError("初始重量必须大于0且全铁含量须在(0, 100]范围内")
+            if not 0 <= feo_content <= 100:
+                raise ValueError("FeO含量须在[0, 100]范围内")
+
+            total_iron_fraction = total_iron_content / 100.0
+            feo_fraction = feo_content / 100.0
+            bound_oxygen_fraction = 0.430 * total_iron_fraction
+            feo_baseline = 0.111 * feo_fraction / bound_oxygen_fraction
+            weight_loss_term = (
+                (initial_weight - current_weight)
+                / (initial_weight * bound_oxygen_fraction)
+            )
+            reduction_degree = (feo_baseline + weight_loss_term) * 100
             return round(reduction_degree, 2)
             
         except Exception as e:
@@ -157,13 +171,21 @@ class ReductionCalculator:
             for timestamp, weight in valid_points
         ]
             
-    def analyze_experiment_data(self, data: List[Dict], oxygen_content: Optional[float]) -> Dict:
+    def analyze_experiment_data(
+        self,
+        data: List[Dict],
+        total_iron_content: Optional[float],
+        feo_content: Optional[float],
+        initial_sample_weight: Optional[float] = None,
+    ) -> Dict:
         """
         分析实验数据，生成结果报告
         
         Args:
             data: 实验数据列表
-            oxygen_content: 样品氧含量 (%)
+            total_iron_content: 全铁含量 w(TFe) (%)
+            feo_content: 氧化亚铁含量 w(FeO) (%)
+            initial_sample_weight: 实验记录的初始样重 m0 (g)
             
         Returns:
             Dict: 分析结果字典
@@ -173,24 +195,27 @@ class ReductionCalculator:
             if not weight_series:
                 return {}
 
-            initial_weight = weight_series[0][1]
+            initial_weight = self._positive_number_or_none(initial_sample_weight)
+            if initial_weight is None:
+                initial_weight = weight_series[0][1]
             final_weight = weight_series[-1][1]
-            oxygen_content_value = None
-            if oxygen_content is not None:
-                try:
-                    candidate = float(oxygen_content)
-                except (TypeError, ValueError):
-                    candidate = 0.0
-                if math.isfinite(candidate) and 0.0 < candidate <= 100.0:
-                    oxygen_content_value = candidate
+            total_iron_content_value = self._percentage_or_none(
+                total_iron_content,
+                allow_zero=False,
+            )
+            feo_content_value = self._percentage_or_none(
+                feo_content,
+                allow_zero=True,
+            )
 
             degree_series: List[tuple[float, float]] = []
-            if oxygen_content_value is not None:
+            if total_iron_content_value is not None and feo_content_value is not None:
                 for minutes, weight in weight_series:
                     degree = self.calculate_reduction_degree(
                         initial_weight,
                         weight,
-                        oxygen_content_value,
+                        total_iron_content_value,
+                        feo_content_value,
                     )
                     if degree is not None:
                         degree_series.append((minutes, degree))
@@ -209,9 +234,11 @@ class ReductionCalculator:
 
             return {
                 "initial_weight": round(initial_weight, 3),
+                "initial_sample_weight": round(initial_weight, 3),
                 "final_weight": round(final_weight, 3),
                 "total_weight_loss": round(initial_weight - final_weight, 3),
-                "oxygen_content": oxygen_content_value,
+                "total_iron_content": total_iron_content_value,
+                "feo_content": feo_content_value,
                 "oxygen_loss_at_30min": self._weight_loss(initial_weight, weights_at[30.0]),
                 "oxygen_loss_at_60min": self._weight_loss(initial_weight, weights_at[60.0]),
                 "oxygen_loss_at_90min": self._weight_loss(initial_weight, weights_at[90.0]),
@@ -236,6 +263,23 @@ class ReductionCalculator:
         if current_weight is None:
             return None
         return round(initial_weight - current_weight, 3)
+
+    @staticmethod
+    def _positive_number_or_none(value) -> Optional[float]:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) and number > 0 else None
+
+    @staticmethod
+    def _percentage_or_none(value, *, allow_zero: bool) -> Optional[float]:
+        try:
+            percentage = float(value)
+        except (TypeError, ValueError):
+            return None
+        lower_bound_ok = percentage >= 0 if allow_zero else percentage > 0
+        return percentage if math.isfinite(percentage) and lower_bound_ok and percentage <= 100 else None
             
     def validate_experiment_conditions(self, data: List[Dict]) -> List[str]:
         """
