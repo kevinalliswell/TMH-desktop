@@ -8,6 +8,7 @@ from PySide6.QtGui import QShortcut, QKeySequence
 import pyqtgraph as pg
 from datetime import datetime
 import json
+import math
 from src.utils.logger import get_logger
 from dataclasses import asdict
 
@@ -352,7 +353,11 @@ class HistoryQuery(QWidget):
                 minutes.append((timestamp_dt - start_time).total_seconds() / 60)
 
             self.temp_curve.setData(minutes, experiment["temperatures"][:len(minutes)])
-            self.weight_curve.setData(minutes, experiment["weights"][:len(minutes)])
+            plot_weights = [
+                value if value is not None else float("nan")
+                for value in experiment["weights"][:len(minutes)]
+            ]
+            self.weight_curve.setData(minutes, plot_weights)
 
             gas_flows = experiment.get("gas_flows", {})
             self.n2_curve.setData(minutes, gas_flows.get("N2", [])[:len(minutes)])
@@ -401,12 +406,15 @@ class HistoryQuery(QWidget):
                 def _get(lst, idx, default=0.0):
                     return lst[idx] if idx < len(lst) else default
 
+                def _format(value, decimals):
+                    return "无效" if value is None else f"{value:.{decimals}f}"
+
                 cells = [
                     formatted_time,
                     f"{_get(timestamps, i):.2f}",
                     f"{_get(temperatures, i):.2f}",
-                    f"{_get(weights, i):.4f}",
-                    f"{_get(weight_losses, i):.2f}",
+                    _format(_get(weights, i), 4),
+                    _format(_get(weight_losses, i), 2),
                     f"{_get(co_flows, i):.2f}",
                     f"{_get(co2_flows, i):.2f}",
                     f"{_get(n2_flows, i):.2f}",
@@ -629,9 +637,12 @@ class HistoryQuery(QWidget):
         parsed_data_points = []
         for i in range(len(timestamps_str)):
             try:
+                weight = float(weights[i])
+                if not math.isfinite(weight):
+                    raise ValueError("weight is not finite")
                 point = {
                     'timestamp': datetime.fromisoformat(timestamps_str[i]),
-                    'weight': float(weights[i])
+                    'weight': weight
                 }
                 if i < len(temperatures):
                     point['temperature'] = float(temperatures[i])
@@ -640,9 +651,10 @@ class HistoryQuery(QWidget):
                     point["co_flow"] = float(co_flows[i])
                 parsed_data_points.append(point)
             except (ValueError, TypeError) as e:
-                self.logger.error(f"转换数据点时出错 for experiment {experiment_id}, index {i}: {e}. Data: timestamp='{timestamps_str[i]}', weight='{weights[i]}'")
-                QMessageBox.critical(self, "数据转换错误", f"实验 '{experiment_name}' 的第 {i+1} 个数据点格式无效，无法分析。")
-                return
+                self.logger.warning(
+                    f"跳过无效重量数据点 for experiment {experiment_id}, index {i}: "
+                    f"{e}. Data: timestamp='{timestamps_str[i]}', weight='{weights[i]}'"
+                )
         
         if not parsed_data_points:
             QMessageBox.warning(self, "无数据", f"未能从实验 '{experiment_name}' 准备任何有效数据点进行分析。")
