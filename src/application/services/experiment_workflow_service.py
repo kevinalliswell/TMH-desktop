@@ -175,12 +175,15 @@ class ExperimentWorkflowService:
         return ExperimentCommandResult(True, "实验已停止")
 
     def apply_protective_gas(self) -> ExperimentCommandResult:
-        """Switch hardware outputs to the default protective gas setup."""
+        """Switch hardware outputs to the default protective gas setup.
+
+        Delegates to the controller's verified implementation so this path
+        cannot drift back into reporting success for unconfirmed writes.
+        """
         if not self.device_manager:
             return ExperimentCommandResult(False, "设备管理器未初始化")
 
-        self.device_manager.set_flow("N2", 5.0)
-        self.device_manager.set_flow("CO", 0.0)
-        self.device_manager.set_flow("CO2", 0.0)
-        self.device_manager.set_flow("H2", 0.0)
-        return ExperimentCommandResult(True, "已切换到N₂保护气氛")
+        success, message = self.experiment_api.apply_safety_atmosphere()
+        if not success:
+            self.logger.critical(f"保护气氛切换失败：{message}")
+        return ExperimentCommandResult(success, message)

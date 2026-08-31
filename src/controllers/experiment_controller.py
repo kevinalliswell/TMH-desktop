@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Optional, Callable, Tuple
 from PySide6.QtCore import QObject, Signal, QTimer
 
+from src.domain.experiment.clock import EXPERIMENT_CLOCK
 from src.models.experiment_state import (
     ExperimentStateMachine,
     ExperimentPhase,
@@ -38,6 +39,9 @@ class ExperimentController(QObject):
     SAFETY_FLOW_MAX_ATTEMPTS = 3
     STAGE_FLOW_MAX_ATTEMPTS = 3
     TEMP_READ_FAILURE_ALERT_THRESHOLD = 3
+    # 实验/阶段计时时钟。与 DataHandler._elapsed_clock 同源，见
+    # src/domain/experiment/clock.py；两者必须是同一个对象。
+    _clock = staticmethod(EXPERIMENT_CLOCK)
     AMBIENT_TEMP_CELSIUS = 25.0  # 默认环境/起始温度 (°C)
 
     # 信号定义
@@ -101,7 +105,6 @@ class ExperimentController(QObject):
         self._temperature_read_failures = 0
         self._temperature_fault_alerted = False
         self._initial_weight_source = None
-        self._clock = time.monotonic
         self._manual_initial_weight_in_progress = False
         
         # 初始化定时器
@@ -660,11 +663,9 @@ class ExperimentController(QObject):
 
             if success:
                 continue
-            if not is_connected:
-                self.logger.info(
-                    f"开发模式：跳过 {gas} 流量设置 ({flow:.1f}L/min)"
-                )
-                continue
+            # 无论设备当前是否被判定为已连接，未确认的气体设定一律视为失败：
+            # is_connected 来自设备实时健康状态，真实断线与开发环境无法区分，
+            # 曾经的“开发模式跳过”会让实验带着错误气氛继续运行。
             failed_gases.append(gas)
         return failed_gases
 
@@ -1244,6 +1245,16 @@ class ExperimentController(QObject):
         finally:
             self._manual_initial_weight_in_progress = False
     
+    def apply_safety_atmosphere(self) -> tuple[bool, str]:
+        """公开的保护气氛入口，供实验流程之外的路径（如实验重置）复用。
+
+        实验流程内部继续调用 ``_set_safety_atmosphere``；此处只是把同一份
+        已校验的实现暴露出去，避免再出现第二份不检查返回值的吹扫代码。
+        """
+        if self._set_safety_atmosphere():
+            return True, "已切换到N₂保护气氛"
+        return False, self._last_safety_error
+
     def _set_safety_atmosphere(self) -> bool:
         """设置安全气氛，并对每个失败通道进行有限重试。"""
         targets = (

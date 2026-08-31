@@ -187,6 +187,12 @@ class DeviceManager:
         temp_device = self.get_device("Temp")
         if temp_device:
             temp_data = temp_device.get_data()
+            # 断线后 get_data() 会无限期返回 _last_valid_data 缓存；控制路径
+            # （阶段推进判定、监控面板）必须拒绝陈旧数据，否则温度看门狗会被
+            # 冻结的读数掩盖。
+            if temp_data and not self._has_fresh_device_data(temp_device, temp_data):
+                self.logger.warning("温度数据已过期，本次采集丢弃该帧")
+                temp_data = None
             if temp_data:
                 model = getattr(temp_device, "model", "TEMP-CTRL")
                 meta = {}
@@ -204,6 +210,9 @@ class DeviceManager:
         balance_device = self.get_device("Balance")
         if balance_device:
             weight_data = balance_device.get_data()
+            if weight_data and not self._has_fresh_device_data(balance_device, weight_data):
+                self.logger.warning("天平数据已过期，本次采集丢弃该帧")
+                weight_data = None
             if weight_data:
                 model = getattr(balance_device, "model", "BALANCE-1200")
                 meta = {}
@@ -268,11 +277,16 @@ class DeviceManager:
             except Exception as e:
                 self.logger.error(f"启动 {name} 线程失败: {str(e)}")
 
-    def stop_all(self):
-        """停止所有设备线程并清理引用"""
+    def stop_all(self) -> bool:
+        """停止所有设备线程并清理引用。
+
+        Returns:
+            bool: 是否所有设备线程都已确实退出并释放串口。False 表示存在
+                  仍在运行的孤儿线程，此时绝不能在同一串口上重建设备。
+        """
         with self._devices_lock:
             if not self.devices:
-                return
+                return True
 
             self.running = False
             self.logger.debug("正在停止所有设备线程...")
@@ -280,16 +294,24 @@ class DeviceManager:
             devices_snapshot = dict(self.devices)
             self.devices.clear()
 
+        all_stopped = True
         # 不持有注册表锁调用设备代码，避免设备 stop 回调形成死锁。
         for name, device in devices_snapshot.items():
             try:
                 if hasattr(device, 'stop'):
-                    device.stop()
-                    self.logger.debug(f"{name} 线程已停止")
+                    # 旧式设备的 stop() 返回 None，按“已停止”处理以保持兼容。
+                    stopped = device.stop()
+                    if stopped is False:
+                        all_stopped = False
+                        self.logger.error(f"{name} 线程未能停止，串口仍被占用")
+                    else:
+                        self.logger.debug(f"{name} 线程已停止")
             except Exception as e:
+                all_stopped = False
                 self.logger.error(f"停止 {name} 线程失败: {str(e)}")
 
         self.logger.debug("所有设备线程已停止，引用已清理")
+        return all_stopped
 
     def set_flow(self, gas: str, value: float) -> bool:
         """

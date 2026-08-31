@@ -62,6 +62,10 @@ class ExperimentConfig:
 class ExperimentDatabase:
     """实验数据库管理"""
 
+    # 1 Hz 采样写入与历史页长查询会并发访问同一文件。默认回滚日志下
+    # 读会阻塞写，长查询能把采样点直接挤掉；WAL 让读写互不阻塞。
+    BUSY_TIMEOUT_MS = 10_000
+
     def __init__(self, db_path: str | None = None):
         if db_path is None:
             db_path = PathManager.get_data_path('experiments.db')
@@ -71,9 +75,24 @@ class ExperimentDatabase:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.init_database()
 
+    def _connect(self, **kwargs):
+        """Open a connection with WAL and a uniform busy timeout applied."""
+        kwargs.setdefault("timeout", self.BUSY_TIMEOUT_MS / 1000.0)
+        conn = sqlite3.connect(self.db_path, **kwargs)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute(f"PRAGMA busy_timeout={self.BUSY_TIMEOUT_MS}")
+        except sqlite3.Error as exc:  # pragma: no cover - exotic filesystems
+            logger.warning(f"设置 SQLite PRAGMA 失败，回退到默认设置: {exc}")
+        return conn
+
     def init_database(self):
         """初始化数据库"""
-        with sqlite3.connect(self.db_path) as conn:
+        # 迁移可能在上次运行中被中断，必须先回收孤儿表，否则下面的
+        # CREATE TABLE IF NOT EXISTS 会建出一张空表，把全部历史数据甩掉。
+        self._recover_interrupted_migration()
+
+        with self._connect() as conn:
             cursor = conn.cursor()
 
             # 创建实验表
@@ -153,13 +172,13 @@ class ExperimentDatabase:
                     info[1]: bool(info[3])
                     for info in cursor.fetchall()
                 }
-                if (
+                needs_nullable_weights = (
                     column_constraints.get('weight')
                     or column_constraints.get('weight_loss')
-                ):
-                    self._make_weight_columns_nullable(cursor)
-                    
+                )
+
             except sqlite3.Error as e:
+                needs_nullable_weights = False
                 logger.error(f"Error checking/adding new columns to 'experiment_data' table: {e}")
 
             # 创建索引 (确保表已存在后再创建索引)
@@ -173,49 +192,144 @@ class ExperimentDatabase:
                 ON experiment_data(experiment_id, timestamp)
             """)
 
-    @staticmethod
-    def _make_weight_columns_nullable(cursor):
-        """Rebuild the SQLite table so unavailable balance values can be NULL."""
-        legacy_table = "experiment_data_not_null_weights"
-        cursor.execute(f"ALTER TABLE experiment_data RENAME TO {legacy_table}")
-        cursor.execute("""
-            CREATE TABLE experiment_data (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                experiment_id TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                experiment_duration TEXT,
-                temperature REAL NOT NULL,
-                weight REAL,
-                weight_loss REAL,
-                co_flow REAL NOT NULL,
-                co2_flow REAL NOT NULL,
-                n2_flow REAL NOT NULL,
-                h2_flow REAL NOT NULL,
-                experiment_status TEXT,
-                system_message TEXT,
-                data_quality TEXT NOT NULL DEFAULT '{}',
-                FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id)
+        # 表重建必须在独立的显式事务里完成，见 _make_weight_columns_nullable。
+        if needs_nullable_weights:
+            self._make_weight_columns_nullable()
+
+    LEGACY_WEIGHTS_TABLE = "experiment_data_not_null_weights"
+
+    def _recover_interrupted_migration(self) -> None:
+        """Re-adopt the orphan table left by a migration that died mid-rebuild.
+
+        ``ALTER TABLE ... RENAME`` is DDL, and under Python's legacy sqlite3
+        transaction handling it autocommits. A power loss between the rename and
+        the rebuild therefore left every historical sample stranded in
+        ``experiment_data_not_null_weights`` while the next start silently
+        created a fresh, empty ``experiment_data`` — and the built-in integrity
+        check still reported the database healthy.
+        """
+        if not os.path.exists(self.db_path):
+            return
+
+        try:
+            with self._connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?)",
+                    (self.LEGACY_WEIGHTS_TABLE, "experiment_data"),
+                )
+                tables = {row[0] for row in cursor.fetchall()}
+                if self.LEGACY_WEIGHTS_TABLE not in tables:
+                    return
+
+                if "experiment_data" not in tables:
+                    cursor.execute(
+                        f"ALTER TABLE {self.LEGACY_WEIGHTS_TABLE} RENAME TO experiment_data"
+                    )
+                    logger.warning(
+                        "检测到上次迁移被中断，已恢复实验数据表；本次启动将重新执行迁移。"
+                    )
+                    return
+
+                cursor.execute("SELECT COUNT(*) FROM experiment_data")
+                current_rows = cursor.fetchone()[0]
+                cursor.execute(f"SELECT COUNT(*) FROM {self.LEGACY_WEIGHTS_TABLE}")
+                orphan_rows = cursor.fetchone()[0]
+
+                if current_rows == 0 and orphan_rows > 0:
+                    cursor.execute("DROP TABLE experiment_data")
+                    cursor.execute(
+                        f"ALTER TABLE {self.LEGACY_WEIGHTS_TABLE} RENAME TO experiment_data"
+                    )
+                    logger.warning(
+                        f"检测到上次迁移被中断，已从孤儿表恢复 {orphan_rows} 行实验数据。"
+                    )
+                elif orphan_rows > 0:
+                    # 两张表都有数据：不能自动合并，保留孤儿表等待人工处理。
+                    logger.critical(
+                        f"迁移残留表 {self.LEGACY_WEIGHTS_TABLE} 中仍有 {orphan_rows} 行数据，"
+                        f"而当前表已有 {current_rows} 行；已保留该表，请人工核对后再清理。"
+                    )
+                else:
+                    cursor.execute(f"DROP TABLE {self.LEGACY_WEIGHTS_TABLE}")
+        except sqlite3.Error as exc:
+            logger.error(f"检查迁移残留表失败: {exc}")
+
+    def _make_weight_columns_nullable(self):
+        """Rebuild the SQLite table so unavailable balance values can be NULL.
+
+        Runs in autocommit mode with an explicit BEGIN IMMEDIATE so the rename,
+        rebuild, copy and drop either all land or none do. With the default
+        isolation level the rename autocommits on its own, which is what made an
+        interrupted upgrade strand the entire sample history.
+        """
+        legacy_table = self.LEGACY_WEIGHTS_TABLE
+        conn = self._connect(isolation_level=None)
+        try:
+            cursor = conn.cursor()
+            # 残留表尚未处理时不能重建：重命名目标名被占用会直接失败，
+            # 而此时数据归属需要人工确认（见 _recover_interrupted_migration）。
+            cursor.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                (legacy_table,),
             )
-        """)
-        cursor.execute(f"""
-            INSERT INTO experiment_data (
-                id, experiment_id, timestamp, experiment_duration, temperature,
-                weight, weight_loss, co_flow, co2_flow, n2_flow, h2_flow,
-                experiment_status, system_message, data_quality
-            )
-            SELECT
-                id, experiment_id, timestamp, experiment_duration, temperature,
-                weight, weight_loss, co_flow, co2_flow, n2_flow, h2_flow,
-                experiment_status, system_message, data_quality
-            FROM {legacy_table}
-        """)
-        cursor.execute(f"DROP TABLE {legacy_table}")
-        logger.info("Made experiment_data weight columns nullable.")
+            if cursor.fetchone():
+                logger.error(
+                    f"存在未处理的迁移残留表 {legacy_table}，本次跳过 experiment_data 重建。"
+                )
+                return False
+
+            cursor.execute("BEGIN IMMEDIATE")
+            cursor.execute(f"ALTER TABLE experiment_data RENAME TO {legacy_table}")
+            cursor.execute("""
+                CREATE TABLE experiment_data (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    experiment_id TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    experiment_duration TEXT,
+                    temperature REAL NOT NULL,
+                    weight REAL,
+                    weight_loss REAL,
+                    co_flow REAL NOT NULL,
+                    co2_flow REAL NOT NULL,
+                    n2_flow REAL NOT NULL,
+                    h2_flow REAL NOT NULL,
+                    experiment_status TEXT,
+                    system_message TEXT,
+                    data_quality TEXT NOT NULL DEFAULT '{}',
+                    FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id)
+                )
+            """)
+            cursor.execute(f"""
+                INSERT INTO experiment_data (
+                    id, experiment_id, timestamp, experiment_duration, temperature,
+                    weight, weight_loss, co_flow, co2_flow, n2_flow, h2_flow,
+                    experiment_status, system_message, data_quality
+                )
+                SELECT
+                    id, experiment_id, timestamp, experiment_duration, temperature,
+                    weight, weight_loss, co_flow, co2_flow, n2_flow, h2_flow,
+                    experiment_status, system_message, data_quality
+                FROM {legacy_table}
+            """)
+            cursor.execute(f"DROP TABLE {legacy_table}")
+            cursor.execute("COMMIT")
+            logger.info("Made experiment_data weight columns nullable.")
+            return True
+        except sqlite3.Error as exc:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            logger.error(f"重建 experiment_data 失败，已回滚: {exc}")
+            raise
+        finally:
+            conn.close()
 
     def create_experiment(self, data: ExperimentData) -> bool:
         """创建实验记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO experiments (
@@ -250,7 +364,7 @@ class ExperimentDatabase:
     def update_experiment(self, experiment_id: str, end_time: str) -> bool:
         """更新实验记录的结束时间"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     UPDATE experiments 
@@ -265,7 +379,7 @@ class ExperimentDatabase:
     def update_experiment_analysis_results(self, experiment_id: str, analysis_results: dict) -> bool:
         """更新实验记录的分析结果"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._connect() as conn:
                 cursor = conn.cursor()
                 analysis_results_json = json.dumps(analysis_results)
                 logger.debug(f"Saving analysis_results_json to DB for exp {experiment_id}: >>>{analysis_results_json}<<<")
@@ -288,7 +402,7 @@ class ExperimentDatabase:
         for attempt in range(max_retries):
             try:
                 # 使用独立连接并设置超时，避免锁表
-                with sqlite3.connect(self.db_path, timeout=10.0) as conn:
+                with self._connect() as conn:
                     cursor = conn.cursor()
                     cursor.execute("""
                         INSERT INTO experiment_data (
@@ -333,7 +447,7 @@ class ExperimentDatabase:
     def get_experiment(self, experiment_id: str) -> Optional[ExperimentData]:
         """获取实验记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     SELECT * FROM experiments 
@@ -361,7 +475,7 @@ class ExperimentDatabase:
     def get_experiment_data(self, experiment_id: str) -> List[dict]:
         """获取实验数据"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._connect() as conn:
                 cursor = conn.cursor()
                 
                 # 首先获取表结构信息
@@ -414,7 +528,7 @@ class ExperimentDatabase:
     def get_all_experiments(self) -> List[ExperimentData]:
         """获取所有实验记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     SELECT * FROM experiments 
@@ -443,7 +557,7 @@ class ExperimentDatabase:
     def delete_experiment(self, experiment_id: str) -> bool:
         """删除实验记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._connect() as conn:
                 cursor = conn.cursor()
                 # 删除实验数据
                 cursor.execute("""
@@ -463,7 +577,7 @@ class ExperimentDatabase:
     def validate_database_integrity(self) -> dict:
         """验证数据库完整性"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._connect() as conn:
                 cursor = conn.cursor()
                 
                 # 检查实验表
@@ -504,7 +618,7 @@ class ExperimentDatabase:
     def repair_database(self) -> bool:
         """修复数据库问题"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._connect() as conn:
                 cursor = conn.cursor()
                 
                 # 删除孤立的数据记录

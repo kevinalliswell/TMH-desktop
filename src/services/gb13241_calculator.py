@@ -170,7 +170,29 @@ class ReductionCalculator:
             ((timestamp - started_at).total_seconds() / 60.0, weight)
             for timestamp, weight in valid_points
         ]
-            
+
+    @staticmethod
+    def _reduction_start_is_uncertain(data: List[Dict]) -> bool:
+        """True when an unreadable CO sample precedes the first confirmed flow.
+
+        The reduction clock starts at the first confirmed CO flow. A failed MFC
+        read cannot be distinguished from 'CO genuinely off', so an unreadable
+        sample before that point means the origin may be later than reality and
+        every interpolated timepoint shifts with it. Report the uncertainty
+        instead of silently publishing a certified reduction degree derived from
+        a guessed origin.
+        """
+        for point in data:
+            if "co_flow" not in point:
+                continue
+            value = point.get("co_flow")
+            if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                if float(value) > 0.0:
+                    return False  # confirmed flow reached, nothing invalid before it
+                continue
+            return True  # an unreadable sample came first
+        return False
+
     def analyze_experiment_data(
         self,
         data: List[Dict],
@@ -232,6 +254,18 @@ class ReductionCalculator:
             if degrees_at[30.0] is not None and degrees_at[60.0] is not None:
                 reduction_rate = round((degrees_at[60.0] - degrees_at[30.0]) / 30.0, 3)
 
+            # 还原起点可能因 CO 读数失效而被前移。此时所有以时间为索引的结果
+            # 都带有未知偏移：报告若照常打印，就是明知有偏差仍然出具认证数据。
+            # 端点量（初始/最终质量、总失重、最终还原度）不依赖起点，予以保留。
+            start_uncertain = self._reduction_start_is_uncertain(data)
+            if start_uncertain:
+                self.logger.warning(
+                    "还原起点不确定（起点前存在无效的 CO 读数），已抑制全部时点结果"
+                )
+
+            def _time_indexed(value):
+                return None if start_uncertain else value
+
             return {
                 "initial_weight": round(initial_weight, 3),
                 "initial_sample_weight": round(initial_weight, 3),
@@ -239,19 +273,32 @@ class ReductionCalculator:
                 "total_weight_loss": round(initial_weight - final_weight, 3),
                 "total_iron_content": total_iron_content_value,
                 "feo_content": feo_content_value,
-                "oxygen_loss_at_30min": self._weight_loss(initial_weight, weights_at[30.0]),
-                "oxygen_loss_at_60min": self._weight_loss(initial_weight, weights_at[60.0]),
-                "oxygen_loss_at_90min": self._weight_loss(initial_weight, weights_at[90.0]),
-                "reduction_degree_at_30min_percent": degrees_at[30.0],
-                "reduction_degree_at_60min_percent": degrees_at[60.0],
-                "reduction_degree_at_90min_percent": degrees_at[90.0],
+                "oxygen_loss_at_30min": _time_indexed(
+                    self._weight_loss(initial_weight, weights_at[30.0])
+                ),
+                "oxygen_loss_at_60min": _time_indexed(
+                    self._weight_loss(initial_weight, weights_at[60.0])
+                ),
+                "oxygen_loss_at_90min": _time_indexed(
+                    self._weight_loss(initial_weight, weights_at[90.0])
+                ),
+                "reduction_degree_at_30min_percent": _time_indexed(degrees_at[30.0]),
+                "reduction_degree_at_60min_percent": _time_indexed(degrees_at[60.0]),
+                "reduction_degree_at_90min_percent": _time_indexed(degrees_at[90.0]),
                 "final_reduction_degree": degree_series[-1][1] if degree_series else None,
-                "reduction_index": reduction_rate,
-                "time_to_40_percent_reduction_min": self._first_crossing_time(degree_series, 40.0),
-                "time_to_50_percent_reduction_min": self._first_crossing_time(degree_series, 50.0),
-                "time_to_70_percent_reduction_min": self._first_crossing_time(degree_series, 70.0),
-                "experiment_duration": weight_series[-1][0],
+                "reduction_index": _time_indexed(reduction_rate),
+                "time_to_40_percent_reduction_min": _time_indexed(
+                    self._first_crossing_time(degree_series, 40.0)
+                ),
+                "time_to_50_percent_reduction_min": _time_indexed(
+                    self._first_crossing_time(degree_series, 50.0)
+                ),
+                "time_to_70_percent_reduction_min": _time_indexed(
+                    self._first_crossing_time(degree_series, 70.0)
+                ),
+                "experiment_duration": _time_indexed(weight_series[-1][0]),
                 "data_points": len(weight_series),
+                "reduction_start_uncertain": start_uncertain,
             }
             
         except Exception as e:

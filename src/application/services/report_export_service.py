@@ -229,18 +229,32 @@ class ReportExportService:
         ]
 
     def _iter_series_rows(self, detail: ExperimentDetailDTO) -> list[list]:
+        """Rows for the tabular exports.
+
+        Invalid readings (a failed MFC/balance/temperature read) must be
+        distinguishable from a blank column in a GB/T test record, so they are
+        rendered as 无效 rather than left empty. Missing trailing samples — a
+        series that is simply shorter — stay blank.
+        """
         rows = []
+        series = (
+            detail.temperatures,
+            detail.weights,
+            detail.weight_losses,
+            detail.gas_flows["CO"],
+            detail.gas_flows["CO2"],
+            detail.gas_flows["N2"],
+            detail.gas_flows["H2"],
+        )
         for index, timestamp in enumerate(detail.timestamps):
-            rows.append([
-                timestamp,
-                self._get_value(detail.temperatures, index),
-                self._get_value(detail.weights, index),
-                self._get_value(detail.weight_losses, index),
-                self._get_value(detail.gas_flows["CO"], index),
-                self._get_value(detail.gas_flows["CO2"], index),
-                self._get_value(detail.gas_flows["N2"], index),
-                self._get_value(detail.gas_flows["H2"], index),
-            ])
+            row = [timestamp]
+            for items in series:
+                if index >= len(items):
+                    row.append(None)  # 该列没有这一行的数据
+                else:
+                    value = items[index]
+                    row.append("无效" if value is None else value)
+            rows.append(row)
         return rows
 
     def _build_rdi_report(self, detail: ExperimentDetailDTO) -> str:
@@ -270,10 +284,11 @@ class ReportExportService:
 
         sieve_inputs = self._get_val(analysis, "sieve_input_masses", {})
         rdi_indices = self._get_val(analysis, "calculated_rdi_indices", {})
-        drum_mass = float(self._get_val(
+        # 入鼓试样质量必须来自实测；没有记录时标注未测得，不得回落到 500 g 名义值。
+        drum_mass = self._positive_number_or_none(self._get_val(
             analysis,
             "drum_sample_weight_g",
-            self._get_val(analysis, "initial_sample_weight_g", detail.sample_weight or 500.0),
+            self._get_val(analysis, "initial_sample_weight_g", detail.sample_weight or None),
         ))
         plus_3_15 = self._get_val(sieve_inputs, "mass_gt_6_3", 0.0) + self._get_val(sieve_inputs, "mass_3_15_to_6_3", 0.0)
         minus_3_15 = self._get_val(sieve_inputs, "mass_0_5_to_3_15", 0.0)
@@ -287,7 +302,8 @@ class ReportExportService:
         rdi_minus_3_15_text = self._format_optional_number(rdi_minus_3_15)
         rdi_0_5_text = self._format_optional_number(rdi_0_5)
 
-        results_html = (f"<tr><td>1</td><td>{drum_mass:.2f}</td><td>{plus_3_15:.2f}</td>"
+        results_html = (f"<tr><td>1</td><td>{self._format_optional_number(drum_mass)}</td>"
+                        f"<td>{plus_3_15:.2f}</td>"
                         f"<td>{minus_3_15:.2f}</td><td>{minus_0_5:.2f}</td>"
                         f"<td>{rdi_minus_3_15_text}</td><td>{rdi_0_5_text}</td></tr>\n")
         report = report.replace(
@@ -486,43 +502,87 @@ class ReportExportService:
         report = report.replace(self._EQUIPMENT_LOOP, self._build_equipment_html(self._get_val(analysis, "equipment", default_equip)))
 
         cc = self._get_val(analysis, "chemical_composition", {})
-        for key, default in [("TFe", "65.5"), ("FeO", "0.3"), ("SiO2", "4.2"), ("Al2O3", "1.0"), ("CaO", "1.2"), ("MgO", "0.5"), ("Basicity", "0.29")]:
-            report = report.replace(f"{{{{ chemical_composition.{key} }}}}", str(self._get_val(cc, key, default)))
+        for key in ["TFe", "FeO", "SiO2", "Al2O3", "CaO", "MgO", "Basicity"]:
+            report = report.replace(
+                f"{{{{ chemical_composition.{key} }}}}",
+                str(self._get_val(cc, key, "未测得")),
+            )
 
         default_cond = [
-            {"parameter": "还原温度", "standard_value": "1000±10℃", "actual_value": "1000℃"},
-            {"parameter": "还原气体", "standard_value": "CO:30%, CO₂:20%, N₂:50%", "actual_value": "CO:30%, CO₂:20%, N₂:50%"},
-            {"parameter": "气体流量", "standard_value": "15±0.5L/min", "actual_value": "15.0L/min"},
-            {"parameter": "球团数量", "standard_value": "10个", "actual_value": "10个"},
-            {"parameter": "球团直径", "standard_value": "10-12mm", "actual_value": "10-12mm"},
+            {"parameter": "还原温度", "standard_value": "1000±10℃", "actual_value": "未测得"},
+            {"parameter": "还原气体", "standard_value": "CO:30%, CO₂:20%, N₂:50%", "actual_value": "未测得"},
+            {"parameter": "气体流量", "standard_value": "15±0.5L/min", "actual_value": "未测得"},
+            {"parameter": "球团数量", "standard_value": "10个", "actual_value": "未测得"},
+            {"parameter": "球团直径", "standard_value": "10-12mm", "actual_value": "未测得"},
         ]
         report = report.replace(self._CONDITIONS_LOOP, self._build_conditions_html(self._get_val(analysis, "test_conditions", default_cond)))
 
-        init_vol = float(self._get_val(analysis, "initial_volume", 100.0))
-        final_vol = float(self._get_val(analysis, "final_volume", 120.0))
-        exp_idx = float(self._get_val(analysis, "expansion_index", 20.0))
-        init_d = (init_vol * 6 / 3.14159) ** (1 / 3)
-        final_d = (final_vol * 6 / 3.14159) ** (1 / 3)
+        init_vol = self._positive_number_or_none(self._get_val(analysis, "initial_volume", None))
+        final_vol = self._positive_number_or_none(self._get_val(analysis, "final_volume", None))
+        exp_idx = self._percentage_or_none(self._get_val(analysis, "expansion_index", None))
+        if exp_idx is None and init_vol not in (None, 0.0) and final_vol is not None:
+            exp_idx = (final_vol - init_vol) / init_vol * 100.0
+
+        results_html = (
+            f"<tr><td>1</td>"
+            f"<td>{self._format_optional_number(self._sphere_diameter(init_vol))}</td>"
+            f"<td>{self._format_optional_number(init_vol, decimals=1)}</td>"
+            f"<td>{self._format_optional_number(self._sphere_diameter(final_vol))}</td>"
+            f"<td>{self._format_optional_number(final_vol, decimals=1)}</td>"
+            f"<td>{self._format_optional_number(exp_idx)}</td></tr>\n"
+        )
         report = report.replace(
             "{% for item in test_results %}\n            <tr>\n                <td>{{ item.pellet_no }}</td>\n"
             "                <td>{{ item.before_diameter }}</td>\n                <td>{{ item.before_volume }}</td>\n"
             "                <td>{{ item.after_diameter }}</td>\n                <td>{{ item.after_volume }}</td>\n"
             "                <td>{{ item.swelling_index }}</td>\n"
             "            </tr>\n            {% endfor %}",
-            f"<tr><td>1</td><td>{init_d:.2f}</td><td>{init_vol:.1f}</td><td>{final_d:.2f}</td><td>{final_vol:.1f}</td><td>{exp_idx:.2f}</td></tr>\n",
+            results_html,
         )
+
+        # 球团外观是人工目视检验记录，仪器无从产生；没有录入时必须留空，
+        # 绝不能替操作员写下“无裂纹、强度良好”。
+        descriptions = self._get_val(analysis, "pellet_description", []) or []
+        if descriptions:
+            description_html = "".join(
+                f"<tr><td>{self._get_val(item, 'pellet_no', index)}</td>"
+                f"<td>{self._get_val(item, 'appearance', '未记录')}</td>"
+                f"<td>{self._get_val(item, 'cracks', '未记录')}</td>"
+                f"<td>{self._get_val(item, 'strength_evaluation', '未记录')}</td></tr>\n"
+                for index, item in enumerate(descriptions, start=1)
+            )
+        else:
+            description_html = "<tr><td>1</td><td>未记录</td><td>未记录</td><td>未记录</td></tr>\n"
         report = report.replace(
             "{% for item in pellet_description %}\n            <tr>\n                <td>{{ item.pellet_no }}</td>\n"
             "                <td>{{ item.appearance }}</td>\n                <td>{{ item.cracks }}</td>\n"
             "                <td>{{ item.strength_evaluation }}</td>\n"
             "            </tr>\n            {% endfor %}",
-            "<tr><td>1</td><td>球团表面光滑，无明显缺陷</td><td>无裂纹</td><td>强度良好</td></tr>\n",
+            description_html,
+        )
+
+        # 合格判定必须来自实际数据，不能写死；未测得时只陈述事实。
+        expansion_summary = (
+            "自由膨胀指数未测得"
+            if exp_idx is None
+            else f"自由膨胀指数为{self._format_optional_number(exp_idx)}%"
         )
         report = report.replace(
             "{{ conclusion }}",
-            f"根据GB/T 13240-2017标准，该球团样品的自由膨胀指数为{exp_idx:.2f}%，符合标准要求。",
+            self._get_val(
+                analysis,
+                "conclusion",
+                f"根据GB/T 13240-2017标准，该球团样品的{expansion_summary}。",
+            ),
         )
         return self._fill_report_footer(report, detail, self._test_date(detail))
+
+    @staticmethod
+    def _sphere_diameter(volume: float | None) -> float | None:
+        """Equivalent sphere diameter for a pellet volume in mm³."""
+        if volume is None or volume <= 0:
+            return None
+        return (volume * 6 / math.pi) ** (1 / 3)
 
     def _load_template(self, filename: str) -> str:
         template_path = self.templates_dir / filename
@@ -616,6 +676,17 @@ class ReportExportService:
         return percentage if 0.0 <= percentage <= 100.0 else None
 
     @staticmethod
+    def _positive_number_or_none(value) -> float | None:
+        """Parse a physical quantity (mass, volume) that has no percentage bound."""
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        if number != number or number in (float("inf"), float("-inf")):  # NaN / inf
+            return None
+        return number if number > 0 else None
+
+    @staticmethod
     def _number_or_none(value) -> float | None:
         try:
             number = float(value)
@@ -631,6 +702,3 @@ class ReportExportService:
     def _get_value(items: list[float], index: int, default=None):
         return items[index] if index < len(items) else default
 
-    @staticmethod
-    def _format_series_value(value: float | None, decimals: int) -> str:
-        return "无效" if value is None else f"{value:.{decimals}f}"

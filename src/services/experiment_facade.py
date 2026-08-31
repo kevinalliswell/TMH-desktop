@@ -81,6 +81,9 @@ class ExperimentFacade:
     def control_gas_flow(self, gas_name: str, flow_value: float) -> bool:
         return self._runtime.control_gas_flow(gas_name, flow_value)
 
+    def apply_safety_atmosphere(self) -> tuple[bool, str]:
+        return self._runtime.apply_safety_atmosphere()
+
     def tare_balance(self, parent_widget=None, skip_confirmation=False) -> bool:
         return self._runtime.tare_balance(parent_widget, skip_confirmation=skip_confirmation)
 

@@ -6,6 +6,7 @@ import math
 from PySide6.QtCore import QObject, Signal
 import queue
 from datetime import datetime
+from src.domain.experiment.clock import EXPERIMENT_CLOCK
 from src.utils.logger import get_logger
 
 class DataHandler(QObject):
@@ -145,9 +146,12 @@ class DataHandler(QObject):
         # 重置停止事件
         self.stop_event.clear()
         
-        # 创建新的线程
-        self.data_thread = threading.Thread(target=self._data_processing_loop)
-        self.db_thread = threading.Thread(target=self._db_saving_loop)
+        # 创建新的线程。
+        # daemon=True 是最后一道保险：stop() 正常路径仍会 signal + join 并完成
+        # 最终落盘，但当某个线程卡在 SQLite 写入时，非守护线程会让解释器在
+        # threading._shutdown() 里无超时地等下去，进程永远退不掉。
+        self.data_thread = threading.Thread(target=self._data_processing_loop, daemon=True)
+        self.db_thread = threading.Thread(target=self._db_saving_loop, daemon=True)
         
         # 启动线程
         self.data_thread.start()
@@ -178,10 +182,25 @@ class DataHandler(QObject):
 
     @property
     def experiment_start_time(self) -> float:
-        """从状态机查询实验开始时间"""
+        """从状态机查询实验开始时间（单调时钟，仅用于计算经过时长）"""
         if self._sm:
             return self._sm.get_state().experiment_start_time
         return 0.0
+
+    # 与控制器共用 domain 层定义的同一个时钟；两处必须一致，否则
+    # experiment_duration 会算成墙上时间与单调时间之差（约 5 万小时）。
+    _elapsed_clock = staticmethod(EXPERIMENT_CLOCK)
+
+    def _format_experiment_duration(self) -> str:
+        """Render elapsed experiment time as HH:MM:SS from the monotonic clock."""
+        start = self.experiment_start_time
+        if not start:
+            return ""
+        duration_seconds = max(0, int(self._elapsed_clock() - start))
+        hours = duration_seconds // 3600
+        minutes = (duration_seconds % 3600) // 60
+        seconds = duration_seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     @property
     def initial_weight(self) -> float:
@@ -587,14 +606,10 @@ class DataHandler(QObject):
             n2_flow, n2_valid = flow_samples["N2"]
             h2_flow, h2_valid = flow_samples["H2"]
             
-            # 计算实验持续时间
-            experiment_duration = ""
-            if self.experiment_start_time:
-                duration_seconds = int(timestamp - self.experiment_start_time)
-                hours = duration_seconds // 3600
-                minutes = (duration_seconds % 3600) // 60
-                seconds = duration_seconds % 60
-                experiment_duration = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            # 计算实验持续时间。
+            # 注意：experiment_start_time 由控制器用 time.monotonic() 写入（以免
+            # 系统对时改变阶段时长），而 timestamp 是采样的墙上时间，两者不可相减。
+            experiment_duration = self._format_experiment_duration()
             
             # 构建数据点
             data_point = {

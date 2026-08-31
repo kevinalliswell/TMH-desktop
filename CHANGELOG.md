@@ -6,6 +6,48 @@ The format is based on Keep a Changelog, and release tags follow `v<version>`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Protective gas on the 实验重置 path is verified per channel instead of being
+  reported as successful whatever the MFC answered; it now shares the
+  controller's retrying implementation rather than being a second copy.
+- A stage gas setpoint that the hardware never confirmed is treated as a failure
+  even when the device layer reports everything disconnected. The previous
+  "开发模式" skip could not tell a real bus loss from a bench run and let an
+  experiment continue with the previous stage's atmosphere.
+- Stale temperature and balance frames are rejected during collection, so the
+  stage-advance logic and the monitor no longer act on a frozen cached reading.
+- The GB/T 13240 swelling report no longer fabricates a certificate: unmeasured
+  quantities print 未测得, the pellet inspection rows come from the operator's
+  record, and the conclusion never asserts 符合标准要求 on its own.
+- Serial ports are no longer closed while their device thread is still running,
+  and reconnect/open/close share one port lock — the handle race behind the
+  unexplained hard exits.
+- The application can always exit: the data workers can no longer wedge
+  interpreter shutdown, closeEvent honours a refused stop instead of closing
+  anyway, and a restart refuses to rebuild devices whose ports were not released.
+- Experiment duration is measured against the controller's monotonic clock, so
+  persisted rows no longer record the wall-clock/monotonic offset.
+- An MFC setpoint queued behind a slow read is no longer cancelled and reported
+  as a device fault; dispatch failures are distinguished from silent devices.
+- The reconnect backoff escalates while a slave stays silent instead of resetting
+  on every successful port open.
+- Schema migration is crash-safe and recovers an orphaned table from an
+  interrupted upgrade; SQLite runs in WAL with a uniform busy timeout, and
+  database repair is refused while an experiment is running.
+- Invalid readings reach charts, exports and the GB calculators as invalid
+  rather than as a real-looking 0.0, and exports mark them 无效 again.
+
+### Added
+
+- Crash diagnostics: native crash stacks and uncaught exceptions from any thread
+  are written to the log directory, so a hard exit finally leaves evidence.
+
+### Changed
+
+- The live chart and data table are bounded, so a multi-hour run no longer
+  degrades the UI until it stops responding.
+
 ## [1.6.260702] - 2026-07-02
 
 ### Added

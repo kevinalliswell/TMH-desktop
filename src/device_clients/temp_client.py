@@ -332,6 +332,7 @@ class TempClient(BaseDevice):
                         # 成功读取，更新健康状态
                         self.last_successful_read = current_time
                         self.connection_healthy = True
+                        self.note_successful_exchange()
                         consecutive_errors = 0
                         
                         # 确保队列不满

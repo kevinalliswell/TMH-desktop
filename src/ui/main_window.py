@@ -215,6 +215,7 @@ class MainWindow(QMainWindow):
             history_query_service=self.ui_dependencies.history_query_service,
             report_export_service=self.ui_dependencies.report_export_service,
             password_manager=self.ui_dependencies.password_manager,
+            is_experiment_running=self._is_experiment_running,
         )
 
         pages = [
@@ -361,8 +362,17 @@ class MainWindow(QMainWindow):
 
         try:
             # 安全停机成功后再关闭串口和后台服务。
-            if self.runtime:
-                self.runtime.stop()
+            # stop() 返回 False 表示后台拒绝停机（通常是安全气氛未确认）；
+            # 必须与异常同等对待，否则窗口会关闭而设备线程仍在运行、气体仍在供给。
+            if self.runtime and self.runtime.stop() is False:
+                self.logger.error("运行时服务拒绝停机，取消退出")
+                QMessageBox.critical(
+                    self,
+                    "退出失败",
+                    "后台服务未能安全停止，系统将保持运行。请检查设备状态后重试。",
+                )
+                event.ignore()
+                return
         except Exception as e:
             self.logger.error(f"停止运行时服务失败: {e}", exc_info=True)
             QMessageBox.critical(
@@ -374,6 +384,14 @@ class MainWindow(QMainWindow):
             return
 
         super().closeEvent(event)
+
+    def _is_experiment_running(self) -> bool:
+        """Whether an experiment is live, for callers that must not disturb it."""
+        dependencies = getattr(self, "ui_dependencies", None)
+        experiment_api = getattr(dependencies, "experiment_api", None)
+        if experiment_api is None:
+            return False
+        return bool(experiment_api.is_experiment_running())
 
     def _stop_running_experiment_before_close(self) -> bool:
         """Synchronously stop an active experiment before device ports close."""

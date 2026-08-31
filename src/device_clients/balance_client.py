@@ -116,6 +116,7 @@ class BalanceClient(BaseDevice):
                             # 本轮串口读取正常，刷新健康状态
                             self.connection_healthy = True
                             self.last_successful_read = time.time()
+                            self.note_successful_exchange()
                             consecutive_errors = 0
                         else:
                             # 串口不可用：累计错误，超过阈值则标记断线以触发智能重连

@@ -5,11 +5,68 @@ from src.ui.adapters import build_chart_table_row, map_frames_to_ui_snapshot
 from src.utils.logger import get_logger
 
 
+class BoundedSeries:
+    """An (x, y) series capped at ``max_points`` without losing its time span.
+
+    A live GB/T run samples at 1 Hz for hours. Appending to unbounded lists and
+    re-uploading the whole history to pyqtgraph on every sample costs O(n) per
+    second — around 50 ms/s after one hour and over a second after twelve, at
+    which point the GUI thread can no longer keep up with its own signal queue
+    and the window stops responding for the rest of the run.
+
+    Rather than dropping the oldest points (which would erase the heating ramp
+    from the chart), halve the resolution once the cap is reached and keep
+    every subsequent sample at the coarser stride. Memory and per-frame cost
+    stay bounded; the curve still spans the whole experiment.
+    """
+
+    def __init__(self, max_points: int):
+        self._max_points = max(2, int(max_points))
+        self._x = []
+        self._y = []
+        self._stride = 1
+        self._seen = 0
+
+    def append(self, x: float, y: float) -> None:
+        self._seen += 1
+        if self._seen % self._stride:
+            return
+        self._x.append(x)
+        self._y.append(y)
+        if len(self._x) > self._max_points:
+            # Keep every other point; the span is preserved, the density halves.
+            self._x = self._x[::2]
+            self._y = self._y[::2]
+            self._stride *= 2
+
+    def clear(self) -> None:
+        self._x = []
+        self._y = []
+        self._stride = 1
+        self._seen = 0
+
+    @property
+    def x(self):
+        return self._x
+
+    @property
+    def y(self):
+        return self._y
+
+    def __len__(self) -> int:
+        return len(self._x)
+
+
 class ChartTabs(QTabWidget):
     """
     图表与数据表格
     包含 温度曲线 / 流量曲线 / 重量曲线 / 数据表格
     """
+
+    # 与历史查询页保持一致的活动点上限。
+    MAX_LIVE_POINTS = 5000
+    # 实时表格保留的最大行数；完整记录始终在数据库里。
+    MAX_TABLE_ROWS = 5000
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -64,13 +121,25 @@ class ChartTabs(QTabWidget):
         # 实验开始时间
         self.experiment_start_time = None
 
-        # 内部缓存
-        self._time = []  # 存储timestamp
-        self._time_minutes = []  # 存储分钟数
-        self._temperatures = {f'T{i+1}': [] for i in range(9)}
-        self._flows = {'N2': [], 'CO': [], 'CO2': [], 'H2': []}
-        self._weight = []
+        # 内部缓存：每条曲线自带 x 轴，长度天然对齐，无需再做切片对齐。
+        self._temperatures = {
+            f'T{i+1}': BoundedSeries(self.MAX_LIVE_POINTS) for i in range(9)
+        }
+        self._flows = {
+            gas: BoundedSeries(self.MAX_LIVE_POINTS)
+            for gas in ('N2', 'CO', 'CO2', 'H2')
+        }
+        self._weight = BoundedSeries(self.MAX_LIVE_POINTS)
         self._experiment_start_time = None  # 实验开始时间
+
+        # 让 pyqtgraph 只绘制可见区间并按峰值降采样（历史页已采用同样设置）。
+        for curve in (
+            *self.temp_curves.values(),
+            *self.flow_curves.values(),
+            self.weight_curve,
+        ):
+            curve.setClipToView(True)
+            curve.setDownsampling(auto=True, method="peak")
         
         # 表格数据写入控制
         self._table_data_enabled = False  # 控制是否写入表格数据
@@ -91,21 +160,23 @@ class ChartTabs(QTabWidget):
         flows = snapshot.flows
         weight_value = snapshot.weight
 
-        # Advance the shared time axis exactly once per frame. Appending it inside
-        # each of the three _update_* methods made _time_minutes grow ~3x faster
-        # than any per-series list and corrupted the X-axis of the live curves.
+        # Establish the shared time origin once. Each series now carries its own
+        # X values, so a series that misses a frame can no longer drift against
+        # the others the way the old shared-axis slicing allowed.
         if temperatures or flows or (weight_value is not None):
             if self._experiment_start_time is None:
                 self._experiment_start_time = t
-            self._time.append(t)
-            self._time_minutes.append((t - self._experiment_start_time) / 60.0)
+
+        if self._experiment_start_time is None:
+            return
+        minutes = (t - self._experiment_start_time) / 60.0
 
         if temperatures:
-            self._update_temperatures(t, temperatures)
+            self._update_temperatures(minutes, temperatures)
         if flows:
-            self._update_flows(t, flows)
+            self._update_flows(minutes, flows)
         if weight_value is not None:
-            self._update_weight(t, weight_value)
+            self._update_weight(minutes, weight_value)
 
         if self._table_data_enabled:
             self._insert_data_row_from_frames(
@@ -116,82 +187,53 @@ class ChartTabs(QTabWidget):
                 initial_weight=initial_weight
             )
 
-    def _update_temperatures(self, t: float, temperatures: dict):
+    @staticmethod
+    def _finite_or_zero(value) -> float:
+        """Coerce a chartable value; non-numeric and NaN readings plot as 0."""
+        if value is None or not isinstance(value, (int, float)) or value != value:
+            return 0.0
+        return float(value)
+
+    def _update_temperatures(self, minutes: float, temperatures: dict):
         if not temperatures or not isinstance(temperatures, dict):
             return
-        # Time axis is advanced once per frame in update_from_frames.
         for sensor, value in temperatures.items():
-            if sensor in self._temperatures:
-                if value is None or not isinstance(value, (int, float)) or value != value:
-                    value = 0
-                self._temperatures[sensor].append(value)
-                min_length = min(len(self._time_minutes), len(self._temperatures[sensor]))
-                if min_length > 0:
-                    time_data = self._time_minutes[-min_length:]
-                    temp_data = self._temperatures[sensor][-min_length:]
-                    valid_temps = []
-                    valid_times = []
-                    for i, temp_val in enumerate(temp_data):
-                        if i < len(time_data) and temp_val is not None and isinstance(temp_val, (int, float)) and not (temp_val != temp_val):
-                            valid_temps.append(float(temp_val))
-                            valid_times.append(time_data[i])
-                    if valid_temps:
-                        self.temp_curves[sensor].setData(valid_times, valid_temps)
+            series = self._temperatures.get(sensor)
+            if series is None:
+                continue
+            series.append(minutes, self._finite_or_zero(value))
+            if len(series):
+                self.temp_curves[sensor].setData(series.x, series.y)
 
-    def _update_flows(self, t: float, flows: dict):
+    def _update_flows(self, minutes: float, flows: dict):
         if not flows or not isinstance(flows, dict):
             return
-        # Time axis is advanced once per frame in update_from_frames.
         for gas, flow_val in flows.items():
-            if gas in self._flows:
-                if flow_val is None or not isinstance(flow_val, (int, float)) or flow_val != flow_val:
-                    flow_val = 0
-                self._flows[gas].append(flow_val)
-                if self._experiment_start_time is not None and self._time_minutes:
-                    flow_len = len(self._flows[gas])
-                    time_len = len(self._time_minutes)
-                    if flow_len <= time_len:
-                        time_data = self._time_minutes[-flow_len:]
-                    else:
-                        time_data = self._time_minutes[:]
-                        current_time = time_data[-1] if time_data else 0
-                        for _ in range(flow_len - time_len):
-                            current_time += 0.1
-                            time_data.append(current_time)
-                    valid_flows = []
-                    valid_times = []
-                    for i, v in enumerate(self._flows[gas]):
-                        if i < len(time_data) and v is not None and isinstance(v, (int, float)) and not (v != v):
-                            valid_flows.append(float(v))
-                            valid_times.append(time_data[i])
-                    if valid_flows:
-                        self.flow_curves[gas].setData(valid_times, valid_flows)
+            series = self._flows.get(gas)
+            if series is None:
+                continue
+            series.append(minutes, self._finite_or_zero(flow_val))
+            if len(series):
+                self.flow_curves[gas].setData(series.x, series.y)
 
-    def _update_weight(self, t: float, value: float):
+    def _update_weight(self, minutes: float, value: float):
         if value is None or not isinstance(value, (int, float)) or value != value:
             return
-        # Time axis is advanced once per frame in update_from_frames.
-        self._weight.append(value)
-        if self._experiment_start_time is not None and self._time_minutes:
-            min_length = min(len(self._time_minutes), len(self._weight))
-            if min_length > 0:
-                time_data = self._time_minutes[-min_length:]
-                weight_data = self._weight[-min_length:]
-                valid_weights = []
-                valid_times = []
-                for i, w in enumerate(weight_data):
-                    if i < len(time_data) and w is not None and isinstance(w, (int, float)) and not (w != w):
-                        valid_weights.append(float(w))
-                        valid_times.append(time_data[i])
-                if valid_weights:
-                    self.weight_curve.setData(valid_times, valid_weights)
+        self._weight.append(minutes, float(value))
+        if len(self._weight):
+            self.weight_curve.setData(self._weight.x, self._weight.y)
 
     def _insert_data_row_from_frames(self, t: float, snapshot,
                                      experiment_status: str = "", system_prompt: str = "", initial_weight: float = 0.0):
         """更新数据表格的一行数据"""
+        # 行数封顶：一场 12 小时实验会积累 4 万余行、约 50 万个 QTableWidgetItem，
+        # 完整记录始终在数据库里，实时表格只需保留最近窗口。
+        while self.data_table.rowCount() >= self.MAX_TABLE_ROWS:
+            self.data_table.removeRow(0)
+
         row = self.data_table.rowCount()
         self.data_table.insertRow(row)
-        
+
         # 设置实验开始时间
         if self.experiment_start_time is None:
             self.experiment_start_time = t
@@ -203,8 +245,10 @@ class ChartTabs(QTabWidget):
             system_prompt=system_prompt,
             initial_weight=initial_weight,
         )
-        self.logger.info(f" 表格 - T8温度: {snapshot.sample_temperature}")
-        self.logger.info(f" 表格 - snapshot: {snapshot}")
+        # 每秒两条 INFO 会让 GUI 线程持续排队写盘并与 6 个工作线程争同一个
+        # handler 锁；采样级细节属于 DEBUG。
+        self.logger.debug(" 表格 - T8温度: %s", snapshot.sample_temperature)
+        self.logger.debug(" 表格 - snapshot: %s", snapshot)
         
         # 创建表格项
         items = [
@@ -324,11 +368,11 @@ class ChartTabs(QTabWidget):
         # 这样下次数据更新时会重新设置开始时间
         # 保留传感器/气体键，否则 _update_* 的 `if sensor in self._temperatures`
         # 守卫会一直为假，清空后再也记录不到任何温度/流量点。
-        self._temperatures = {f'T{i+1}': [] for i in range(9)}
-        self._flows = {'N2': [], 'CO': [], 'CO2': [], 'H2': []}
-        self._weight = []
-        self._time = []
-        self._time_minutes = []
+        for series in self._temperatures.values():
+            series.clear()
+        for series in self._flows.values():
+            series.clear()
+        self._weight.clear()
         # 注意：不清空 _experiment_start_time，让下次数据更新时重新设置
         
         # self.logger.info("已清除所有绘图数据")

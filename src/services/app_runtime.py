@@ -66,6 +66,8 @@ class AppRuntime(QObject):
         self.comm_status_timer = None
         self.save_interval = save_interval
         self._started = False
+        # 上一次 stop() 是否确认所有设备线程都已退出并释放串口。
+        self._devices_released = True
         self._device_manager_factory = device_manager_factory or DeviceManager
         self._data_handler_factory = data_handler_factory or self._create_data_handler
         self._experiment_runtime_factory = (
@@ -157,11 +159,14 @@ class AppRuntime(QObject):
                 self.logger.error(f"关闭数据处理器出错: {e}")
 
         # 停止设备管理器
+        devices_released = True
         if self.device_manager:
             try:
-                self.device_manager.stop_all()
+                devices_released = self.device_manager.stop_all() is not False
             except Exception as e:
+                devices_released = False
                 self.logger.error(f"关闭设备管理器出错: {e}")
+        self._devices_released = devices_released
 
         self.device_manager = None
         self.device_hub = None
@@ -179,7 +184,20 @@ class AppRuntime(QObject):
         """重启后端服务（用于应用新的通信配置）。"""
         if not self.stop():
             return False
-        self.start()
+
+        # 上一代设备线程若仍在运行，它们还占着同一批 COM 口：此时重建会与孤儿
+        # 线程抢端口，谁先 CreateFile 谁赢，失败方将永久处于“设备未连接”。
+        if not getattr(self, "_devices_released", True):
+            self.logger.critical(
+                "上一代设备线程未能释放串口，已取消重建；请重启应用以恢复设备通信。"
+            )
+            return False
+
+        try:
+            self.start()
+        except Exception as exc:
+            self.logger.critical(f"重建运行时服务失败，服务已停止: {exc}", exc_info=True)
+            return False
         return self._started
 
     def apply_comm_settings(self) -> bool:
