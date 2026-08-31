@@ -17,6 +17,12 @@ def main():
     app = None
     exit_code = 0
 
+    # 先装崩溃黑匣子，再构建任何窗口或设备：此前段错误和工作线程异常都不会在
+    # 日志里留下痕迹（打包为 --windowed 后 stderr 无人接收）。
+    from src.utils.crash_diagnostics import install as install_crash_diagnostics
+
+    install_crash_diagnostics(logger)
+
     try:
         from PySide6.QtWidgets import QApplication
         from src.ui.main_window import MainWindow
