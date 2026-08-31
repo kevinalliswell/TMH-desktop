@@ -41,7 +41,7 @@ proto = MfcCplProtocol()
 cmd = proto.build_read(register_addr=1206, num_bytes=2, slave_address=1)
 
 # response = serial.read(...)
-value = proto.parse_response(response)
+value = proto.parse_response(response, expected_slave=1)
 frame = build_mfc_frame(
     model="MQV0020BS",
     gas_type="H2",
@@ -83,4 +83,3 @@ frame = build_balance_frame(
     meta={"port": "COM15", "baudrate": 1200}
 )
 ```
-

@@ -276,8 +276,9 @@ class MultiMFCClient(BaseDevice):
                             new_data = self.serial_port.read(self.serial_port.in_waiting)
                             response += new_data
                             
-                            # 检查响应是否完整
-                            if b'\r\n' in response:
+                            # 仅在缓冲区包含匹配当前命令的有效 CPL 回复时返回。
+                            # 这样可跳过半双工回显、坏校验帧和其他从站的迟到回复。
+                            if self._has_matching_response(command.cmd_bytes, response):
                                 self.logger.debug(f"接收到完整响应: {response}")
                                 self._serial_last_used = time.time()
                                 return response
@@ -301,6 +302,25 @@ class MultiMFCClient(BaseDevice):
                     time.sleep(self.RETRY_DELAY)
             
             return None
+
+    def _has_matching_response(self, command: bytes, response: bytes) -> bool:
+        """Check whether ``response`` contains a valid reply to ``command``."""
+        try:
+            slave_address = int(command[1:3].decode("ascii"), 16)
+        except (AttributeError, UnicodeDecodeError, ValueError):
+            return b'\r\n' in response
+
+        if b"XRS" in command:
+            return self._cpl.parse_response(
+                response,
+                expected_slave=slave_address,
+            ) is not None
+        if b"XWS" in command:
+            return self._cpl.parse_write_ack(
+                response,
+                expected_slave=slave_address,
+            ) is not None
+        return b'\r\n' in response
 
     def _send_command_async(self, cmd: bytes, priority: CommandPriority = CommandPriority.NORMAL, 
                            timeout: float = None) -> SerialCommand:
@@ -384,7 +404,10 @@ class MultiMFCClient(BaseDevice):
             
         # 解析响应
         try:
-            value = self._cpl.parse_response(response)
+            value = self._cpl.parse_response(
+                response,
+                expected_slave=slave_address,
+            )
             return value
         except Exception as e:
             self.logger.error(f"解析 {gas_type} 数据失败: {e}")
@@ -571,7 +594,10 @@ class MultiMFCClient(BaseDevice):
                 self.logger.error(f"{gas_type} 流量设定命令超时")
                 return False
 
-            acknowledgement = self._cpl.parse_write_ack(command.result or b"")
+            acknowledgement = self._cpl.parse_write_ack(
+                command.result or b"",
+                expected_slave=slave_address,
+            )
             if acknowledgement is not True:
                 if acknowledgement is False:
                     self.logger.error(f"{gas_type} 流量设定被设备拒绝 (NG)")

@@ -14,6 +14,7 @@ Three kinds of tests live in the safety-net files:
 """
 import pytest
 
+from src.device_clients.multi_mfc_client import MultiMFCClient
 from tmh_comm.protocols.mfc_cpl import MfcCplProtocol, _cpl_checksum
 from tmh_comm.protocols.temp_rtu import TempRtuProtocol, _crc16_modbus
 
@@ -117,24 +118,46 @@ def test_temperature_config_defaults_to_signed_registers():
 
 def test_cpl_parse_valid_reply_baseline():
     # Guards the 43c58ef framing fix: a fully framed device reply must parse.
-    assert cpl.parse_response(cpl_reply(1, 480)) == 48.0
+    assert cpl.parse_response(cpl_reply(1, 480), expected_slave=1) == 48.0
 
 
 def test_cpl_parse_echoed_command_returns_none_baseline():
     # A half-duplex adapter echoes the request; it must never parse as a value.
     echo = cpl.build_read(register_addr=1001, num_bytes=2, slave_address=1)
-    assert cpl.parse_response(echo) is None
+    assert cpl.parse_response(echo, expected_slave=1) is None
 
 
-def test_cpl_parse_accepts_wrong_slave_KNOWN_BUG_69():
-    # parse_response has no expected-slave parameter: a late reply from slave 1
-    # is accepted while the executor is reading slave 2, so one gas's flow can
-    # be recorded under another gas. The #69 fix must validate the address
-    # field (and rewrite this test to assert rejection).
+def test_cpl_parse_rejects_wrong_slave():
     late_reply_from_slave_1 = cpl_reply(1, 480)
-    assert cpl.parse_response(late_reply_from_slave_1) == 48.0
+    assert cpl.parse_response(late_reply_from_slave_1, expected_slave=2) is None
 
 
-def test_cpl_parse_ignores_checksum_KNOWN_BUG_69():
+def test_cpl_parse_rejects_bad_checksum():
     corrupted = cpl_reply(1, 480, checksum=b"ZZ")
-    assert cpl.parse_response(corrupted) == 48.0
+    assert cpl.parse_response(corrupted, expected_slave=1) is None
+
+
+def test_cpl_parse_skips_echo_before_valid_reply():
+    echo = cpl.build_read(register_addr=1001, num_bytes=2, slave_address=1)
+    response = echo + cpl_reply(1, 480)
+
+    assert cpl.parse_response(response, expected_slave=1) == 48.0
+
+
+def test_cpl_parse_skips_late_reply_from_another_slave():
+    response = cpl_reply(1, 480) + cpl_reply(2, 520)
+
+    assert cpl.parse_response(response, expected_slave=2) == 52.0
+
+
+def test_mfc_executor_does_not_complete_on_echo_or_wrong_slave():
+    client = object.__new__(MultiMFCClient)
+    client._cpl = cpl
+    command = cpl.build_read(register_addr=1001, num_bytes=2, slave_address=2)
+    invalid_prefix = command + cpl_reply(1, 480)
+
+    assert client._has_matching_response(command, invalid_prefix) is False
+    assert client._has_matching_response(
+        command,
+        invalid_prefix + cpl_reply(2, 520),
+    ) is True

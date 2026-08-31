@@ -7,7 +7,12 @@ from __future__ import annotations
 
 import pytest
 
-from tmh_comm.protocols.mfc_cpl import MfcCplProtocol
+from tmh_comm.protocols.mfc_cpl import MfcCplProtocol, _cpl_checksum
+
+
+def _cpl_frame(body: str) -> bytes:
+    framed = f"\x02{body}\x03"
+    return f"{framed}{_cpl_checksum(framed)}\r\n".encode()
 
 
 # --------------------------------------------------------------------------
@@ -37,17 +42,16 @@ def test_reduction_degree_rejects_invalid_inputs():
 # <ETX><checksum>\r\n, not only the trimmed mock used by the old test.
 # --------------------------------------------------------------------------
 @pytest.mark.parametrize(
-    "frame, expected",
+    "frame, slave, expected",
     [
-        (b"\x020100X20,30\x03F3\r\n", 3.0),   # real framed reply (ETX+checksum+CRLF)
-        (b"\x020500X00,52\x03EB\r\n", 5.2),
-        (b"\x02OK,1234\x03", 123.4),          # legacy trimmed mock still works
-        (b"", None),                           # empty response
-        (b"Invalid data", None),               # no comma-separated value field
+        (_cpl_frame("0100X20,30"), 1, 3.0),
+        (_cpl_frame("0500X00,52"), 5, 5.2),
+        (b"", 1, None),
+        (b"Invalid data", 1, None),
     ],
 )
-def test_cpl_parse_response_handles_real_frames(frame, expected):
-    assert MfcCplProtocol().parse_response(frame) == expected
+def test_cpl_parse_response_handles_real_frames(frame, slave, expected):
+    assert MfcCplProtocol().parse_response(frame, expected_slave=slave) == expected
 
 
 # --------------------------------------------------------------------------

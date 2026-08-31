@@ -72,18 +72,17 @@ def test_mfc_cpl_protocol(result: TestResult):
     else:
         result.fail("build_write", f"命令格式异常: {cmd_write}")
 
-    # 测试响应解析
-    # 模拟响应: STX + data + ETX (checksum 在 ETX 后, strip 会移除 STX/ETX)
-    # 响应格式: \x02 STATUS,VALUE \x03 CHECKSUM \r
-    mock_response = b"\x02OK,1234\x03"
-    value = proto.parse_response(mock_response)
+    # 测试响应解析（完整地址、校验和与 CRLF）
+    framed = "\x0201,1234\x03"
+    mock_response = f"{framed}{_cpl_checksum(framed)}\r\n".encode()
+    value = proto.parse_response(mock_response, expected_slave=1)
     if value == 123.4:  # 1234 / 10 = 123.4
         result.ok("parse_response - 正确解析数值 (1234 -> 123.4)")
     else:
         result.fail("parse_response", f"期望 123.4, 实际 {value}")
 
     # 测试空响应
-    empty_value = proto.parse_response(b"")
+    empty_value = proto.parse_response(b"", expected_slave=1)
     if empty_value is None:
         result.ok("parse_response - 空响应返回 None")
     else:
