@@ -120,3 +120,34 @@ def test_setpoint_verify_rejects_mismatch_and_preserves_previous_cache(client_fa
 
     assert client.set_sp_value("H2", 2.5, verify=True) is False
     assert client._latest_data["H2"]["SV"] == 1.0
+
+
+def test_setpoint_scaling_rounds_floating_point_artifacts(client_factory):
+    client = client_factory([_frame("0100XOK")])
+
+    assert client.set_sp_value("H2", 0.3, verify=False) is True
+
+    assert b",30\x03" in client.serial_port.writes[0]
+
+
+def test_incomplete_mfc_response_is_retried_instead_of_returned(client_factory):
+    client = client_factory([b"\x020100XOK"] * MultiMFCClient.MAX_RETRIES)
+
+    assert client.set_sp_value("H2", 2.5, verify=False) is False
+
+    assert len(client.serial_port.writes) == client.MAX_RETRIES
+
+
+def test_setpoint_waits_for_started_command_to_finish(client_factory, monkeypatch):
+    client = client_factory([])
+    client.WRITE_COMMAND_TIMEOUT = 0.4
+
+    def delayed_success(_command):
+        import time
+
+        time.sleep(1.5)
+        return _frame("0100XOK")
+
+    monkeypatch.setattr(client, "_execute_serial_command", delayed_success)
+
+    assert client.set_sp_value("H2", 2.5, verify=False) is True

@@ -174,7 +174,7 @@ class MfcDevice:
         scaling = self.config.flow_scaling.get(gas_name, 0.1)
         if scaling == 0:
             raise ValueError(f"Invalid flow scaling for {gas_name}: {scaling}")
-        return int(float(flow_value) / scaling * 10)
+        return round(float(flow_value) / scaling * 10)
 
     def _resolve_comm_format(self) -> int:
         parity = (self.config.parity or "").upper()
