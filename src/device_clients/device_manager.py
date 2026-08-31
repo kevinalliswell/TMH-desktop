@@ -1,41 +1,45 @@
 # device_manager.py
-import os
 import time
 import threading
-import traceback
 import atexit
 
 # 设备客户端类将通过外部注册，不在此处直接导入
 from src.utils.logger import get_logger
 from src.utils.path_manager import PathManager
 from src.utils.audit import audit, AuditCategory, AuditResult
+from src.infrastructure.repositories.comm_config_repository import CommConfigRepository
 from tmh_comm.standard import (
     build_balance_frame,
     build_mfc_frame,
     build_temp_frame,
 )
-import json
 
 class DeviceManager:
     _MIN_DATA_FRESHNESS_SECONDS = 5.0
     _DATA_FRESHNESS_INTERVALS = 5.0
+    _DEVICE_NAME_ALIASES = {
+        "temp": "Temp",
+        "temperature": "Temp",
+        "balance": "Balance",
+        "mfc": "MFC",
+        "multimfc": "MFC",
+        "multi_mfc": "MFC",
+    }
 
     def __init__(self, config_path: str | None = None):
         if config_path is None:
             config_path = PathManager.get_config_path('comm_config.json')
         # 设备注册表 - 支持动态注册
         self.devices = {}
-        self._devices_lock = threading.Lock()  # 保护设备字典的线程安全访问
-        self.temp = None
-        self.balance = None
-        self.multi_mfc = None
+        self._devices_lock = threading.RLock()  # 保护设备字典的线程安全访问
         self.running = False
         self.config_path = config_path
 
         # 初始化日志系统
         self.logger = get_logger("设备管理器")
 
-        # 加载配置文件
+        # 从统一仓库加载配置和默认值
+        self._config_repository = CommConfigRepository(config_file=self.config_path)
         self.config = self._load_config()
 
         # 不再自动初始化设备，改为手动注册
@@ -45,54 +49,31 @@ class DeviceManager:
 
     def _load_config(self):
         """加载配置文件"""
-        try:
-            with open(self.config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                self.logger.debug(f"成功加载配置文件: {self.config_path}")
-                return config
-        except Exception as e:
-            self.logger.error(f"加载配置文件失败: {str(e)}")
-            self.logger.warning("将使用默认配置")
-            return self._get_default_config()
+        return self._config_repository.load_raw()
 
     def _get_default_config(self):
         """返回默认配置"""
-        return {
-            "COM_RS485_MFC": {
-                "port": "COM1",
-                "baudrate": 9600,
-                "bytesize": 8,
-                "parity": "E",
-                "stopbits": 1,
-                "timeout": 0.5,
-                "SLAVE_ADDRESS_MFC": {
-                    "H2": 1,
-                    "N2": 2,
-                    "CO2": 3,
-                    "CO": 4
-                }
-            },
-            "COM_RS485_TEMP": {
-                "port": "COM1",
-                "baudrate": 9600,
-                "bytesize": 8,
-                "parity": "N",
-                "stopbits": 1,
-                "timeout": 1.0,
-                "slave_address": 0
-            },
-            "SLAVE_ADDRESS_TEMP": {
-                "TEMP": 0
-            },
-            "COM_RS232_Balance": {
-                "port": "COM4",
-                "baudrate": 1200,
-                "bytesize": 8,
-                "parity": "E",
-                "stopbits": 1,
-                "timeout": 1.0
-            }
-        }
+        return self._config_repository.default_settings
+
+    @classmethod
+    def _normalize_device_name(cls, name: str) -> str:
+        normalized = str(name).strip()
+        return cls._DEVICE_NAME_ALIASES.get(normalized.casefold(), normalized)
+
+    @property
+    def temp(self):
+        """兼容旧调用；设备真源仍为注册表。"""
+        return self.get_device("Temp")
+
+    @property
+    def balance(self):
+        """兼容旧调用；设备真源仍为注册表。"""
+        return self.get_device("Balance")
+
+    @property
+    def multi_mfc(self):
+        """兼容旧调用；设备真源仍为注册表。"""
+        return self.get_device("MFC")
 
 
     def set_data_handler(self, data_handler):
@@ -110,16 +91,10 @@ class DeviceManager:
             name: 设备名称
             device_instance: 设备实例
         """
-        self.devices[name] = device_instance
-        self.logger.info(f"设备 {name} 注册成功")
-        
-        # 为了兼容原有逻辑，同时更新传统属性
-        if name.lower() == "balance":
-            self.balance = device_instance
-        elif name.lower() == "temp":
-            self.temp = device_instance
-        elif name.lower() == "mfc":
-            self.multi_mfc = device_instance
+        canonical_name = self._normalize_device_name(name)
+        with self._devices_lock:
+            self.devices[canonical_name] = device_instance
+        self.logger.info(f"设备 {canonical_name} 注册成功")
 
     def unregister_device(self, name: str):
         """注销设备
@@ -127,47 +102,45 @@ class DeviceManager:
         Args:
             name: 设备名称
         """
-        if name in self.devices:
-            device = self.devices[name]
+        canonical_name = self._normalize_device_name(name)
+        with self._devices_lock:
+            device = self.devices.pop(canonical_name, None)
+        if device is not None:
             if hasattr(device, 'stop'):
                 device.stop()
-            del self.devices[name]
-            self.logger.info(f"设备 {name} 注销成功")
-            
-            # 清理传统属性
-            if name.lower() == "balance":
-                self.balance = None
-            elif name.lower() == "temp":
-                self.temp = None
-            elif name.lower() == "mfc":
-                self.multi_mfc = None
+            self.logger.info(f"设备 {canonical_name} 注销成功")
 
     def list_devices(self):
         """列出所有已注册的设备"""
-        return list(self.devices.keys())
+        with self._devices_lock:
+            return list(self.devices.keys())
 
     def get_device(self, name: str):
         """获取指定设备实例"""
-        return self.devices.get(name)
+        canonical_name = self._normalize_device_name(name)
+        with self._devices_lock:
+            return self.devices.get(canonical_name)
 
     def start_device(self, name: str):
         """启动指定设备"""
-        device = self.devices.get(name)
+        canonical_name = self._normalize_device_name(name)
+        device = self.get_device(canonical_name)
         if device and hasattr(device, 'start'):
             device.start()
             self.running = True
-            self.logger.info(f"设备 {name} 启动成功")
+            self.logger.info(f"设备 {canonical_name} 启动成功")
         else:
-            self.logger.error(f"设备 {name} 不存在或无法启动")
+            self.logger.error(f"设备 {canonical_name} 不存在或无法启动")
 
     def stop_device(self, name: str):
         """停止指定设备"""
-        device = self.devices.get(name)
+        canonical_name = self._normalize_device_name(name)
+        device = self.get_device(canonical_name)
         if device and hasattr(device, 'stop'):
             device.stop()
-            self.logger.info(f"设备 {name} 停止成功")
+            self.logger.info(f"设备 {canonical_name} 停止成功")
         else:
-            self.logger.error(f"设备 {name} 不存在或无法停止")
+            self.logger.error(f"设备 {canonical_name} 不存在或无法停止")
 
     def get_status(self, name: str = None):
         """获取设备状态
@@ -176,7 +149,7 @@ class DeviceManager:
             name: 设备名称，如果为None则返回所有设备状态
         """
         if name:
-            device = self.devices.get(name)
+            device = self.get_device(name)
             if device and hasattr(device, 'get_data'):
                 return device.get_data()
             return None
@@ -187,7 +160,9 @@ class DeviceManager:
     def get_all_status(self):
         """获取所有设备状态（新接口）"""
         status = {}
-        for name, device in self.devices.items():
+        with self._devices_lock:
+            devices_snapshot = dict(self.devices)
+        for name, device in devices_snapshot.items():
             if hasattr(device, 'get_data'):
                 status[name] = {
                     "data": device.get_data(),
@@ -209,7 +184,7 @@ class DeviceManager:
         frames = {}
 
         # 温度帧
-        temp_device = self.devices.get("Temp") or self.temp
+        temp_device = self.get_device("Temp")
         if temp_device:
             temp_data = temp_device.get_data()
             if temp_data:
@@ -226,7 +201,7 @@ class DeviceManager:
                 frames["temperature"] = frame
 
         # 重量帧
-        balance_device = self.devices.get("Balance") or self.balance
+        balance_device = self.get_device("Balance")
         if balance_device:
             weight_data = balance_device.get_data()
             if weight_data:
@@ -242,7 +217,7 @@ class DeviceManager:
                 frames["weight"] = frame
 
         # 流量帧（按气体）
-        mfc_device = self.devices.get("MFC") or self.multi_mfc
+        mfc_device = self.get_device("MFC")
         if mfc_device:
             flows = getattr(mfc_device, "current_flows", {})
             setpoints = getattr(mfc_device, "setpoints", {})
@@ -280,7 +255,9 @@ class DeviceManager:
         self.running = True
 
         # 启动所有注册的设备
-        for name, device in self.devices.items():
+        with self._devices_lock:
+            devices_snapshot = dict(self.devices)
+        for name, device in devices_snapshot.items():
             try:
                 if hasattr(device, 'start') and hasattr(device, 'is_alive'):
                     if not device.is_alive():
@@ -300,22 +277,19 @@ class DeviceManager:
             self.running = False
             self.logger.debug("正在停止所有设备线程...")
 
-            # 停止所有注册的设备
-            for name, device in self.devices.items():
-                try:
-                    if hasattr(device, 'stop'):
-                        device.stop()
-                        self.logger.debug(f"{name} 线程已停止")
-                except Exception as e:
-                    self.logger.error(f"停止 {name} 线程失败: {str(e)}")
-
-            # 清理设备引用
+            devices_snapshot = dict(self.devices)
             self.devices.clear()
-            self.temp = None
-            self.balance = None
-            self.multi_mfc = None
 
-            self.logger.debug("所有设备线程已停止，引用已清理")
+        # 不持有注册表锁调用设备代码，避免设备 stop 回调形成死锁。
+        for name, device in devices_snapshot.items():
+            try:
+                if hasattr(device, 'stop'):
+                    device.stop()
+                    self.logger.debug(f"{name} 线程已停止")
+            except Exception as e:
+                self.logger.error(f"停止 {name} 线程失败: {str(e)}")
+
+        self.logger.debug("所有设备线程已停止，引用已清理")
 
     def set_flow(self, gas: str, value: float) -> bool:
         """
@@ -334,7 +308,7 @@ class DeviceManager:
         self.logger.debug(f"设置{gas}流量为{value} L/min")
         
         # 从注册的设备中获取MFC
-        mfc_device = self.devices.get("MFC") or self.multi_mfc
+        mfc_device = self.get_device("MFC")
         if not mfc_device:
             self.logger.error("多通道质量流量计未注册")
             return False
@@ -371,7 +345,7 @@ class DeviceManager:
         self.logger.info("DeviceManager.tare_balance被调用")
         
         # 从注册的设备中获取天平
-        balance_device = self.devices.get("Balance") or self.balance
+        balance_device = self.get_device("Balance")
         if not balance_device:
             self.logger.error("天平设备未注册")
             return False
@@ -564,7 +538,7 @@ class DeviceManager:
         """验证MFC设备数据有效性"""
         if not device:
             return False
-        
+
         try:
             # 检查是否有任何气体通道有有效数据
             if hasattr(device, 'get_latest_data'):
@@ -612,29 +586,13 @@ class DeviceManager:
 
     def _validate_mfc_data(self):
         """验证MFC数据有效性（兼容旧接口）"""
-        mfc_device = self.devices.get("MFC") or self.multi_mfc
+        mfc_device = self.get_device("MFC")
         return self._validate_mfc_data_for_device(mfc_device)
 
 
 # 使用示例（已简化为仅创建配置文件）
 if __name__ == "__main__":
-    try:
-        config_path = PathManager.get_config_path("comm_config.json")
-        print(f"配置文件路径: {config_path}")
-
-        # 初始化设备管理器
-        dm = DeviceManager(config_path=config_path)
-
-        # 如果配置文件不存在，创建默认配置
-        if not os.path.exists(config_path):
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(dm._get_default_config(), f, indent=4)
-                print(f"已创建默认配置文件: {config_path}")
-        
-        print("设备管理器初始化完成，请通过 register_device() 方法注册设备")
-
-    except Exception as e:
-        print(f"程序出现异常: {str(e)}")
-        import traceback
-        traceback.print_exc()
+    config_path = PathManager.get_config_path("comm_config.json")
+    print(f"配置文件路径: {config_path}")
+    DeviceManager(config_path=config_path)
+    print("设备管理器初始化完成，请通过 register_device() 方法注册设备")
