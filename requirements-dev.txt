@@ -3,3 +3,6 @@
 pytest>=8.4
 pytest-qt>=4.4
 
+# 供 tests/ci/test_workflow_trigger_coverage.py 解析 .github/workflows/*.yml
+PyYAML>=6.0,<7
+
