@@ -1,20 +1,28 @@
 name: CI
 
 on:
+  # 只覆盖长期存在的集成分支。话题分支由它自己的 PR 负责验证，不必再跑一遍
+  # （同一提交同时命中 push 与 pull_request 会落进两个不同的 concurrency
+  # group，等于每次推送双倍构建）。
+  #
+  # 集成分支必须留在这里：跨 PR 的语义合并缺陷——每个 PR 单看都正确，合到一起
+  # 才出错——只有在合并后的集成分支上才暴露得出来。
   push:
     branches:
       - main
       - develop
       - "feature/**"
-      - "bugfix/**"
-      - "hotfix/**"
       - "release/**"
     tags-ignore:
       - "v*"
+  # 不限定目标分支。此前限定为 [main, develop]，凡是以集成分支为目标的 PR
+  # 一次 CI 都不会跑；用 "**" 而不是枚举分支前缀，是因为枚举必然随新前缀持续
+  # 漏网，而漏网时没有任何报错——正是这一点让问题长期无人察觉。
   pull_request:
     branches:
-      - main
-      - develop
+      - "**"
+  # 任意分支/提交的手动补跑入口。
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
