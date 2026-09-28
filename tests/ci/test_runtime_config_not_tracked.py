@@ -39,19 +39,20 @@ def _is_tracked(relative_path: str) -> bool:
 def _is_ignored(relative_path: str) -> bool:
     """check-ignore 的退出码：0 = 被忽略，1 = 未被忽略。
 
-    目录型规则（`configs/gas_programs/`）不会匹配不带尾斜杠、且磁盘上尚不存在的
-    路径，所以目录还要用「目录内的一个文件」再探一次——那才是 git 真会被要求
-    暂存的路径形态。
+    只认对该路径**本身**的直接匹配。曾经这里还退而接受「目录内的一个文件被忽略」
+    作为证据，那是错的：带尾斜杠的目录型规则（`configs/x/`）不匹配裸路径
+    `configs/x`，所以当 x 其实是文件、规则却误加了尾斜杠时，`configs/x/.probe`
+    会命中而 `configs/x` 不会——`git add` 照样能把那个文件暂存，护栏却是绿的。
+
+    改成只认直接匹配，规则就必须写成不带尾斜杠的 `configs/x`：这种写法对裸路径与
+    其下的子路径都匹配，并且不像尾斜杠形式那样依赖该目录此刻是否存在于磁盘上。
     """
-    for candidate in (relative_path, f"{relative_path}/.probe"):
-        result = subprocess.run(
-            ["git", "check-ignore", "-q", candidate],
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-        )
-        if result.returncode == 0:
-            return True
-    return False
+    result = subprocess.run(
+        ["git", "check-ignore", "-q", relative_path],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+    )
+    return result.returncode == 0
 
 
 def test_every_runtime_config_path_is_either_tracked_or_ignored():
@@ -65,7 +66,8 @@ def test_every_runtime_config_path_is_either_tracked_or_ignored():
     ]
     assert not limbo, (
         "以下配置路径既未被跟踪也未被忽略，一次 git add configs/ 就会把它们提交进"
-        f"公开仓库：{limbo}。请决定它属于仓库内容（跟踪）还是现场数据（加入 .gitignore）。"
+        f"公开仓库：{limbo}。请决定它属于仓库内容（跟踪）还是现场数据（加入 .gitignore，"
+        "目录也不要带尾斜杠）。"
     )
 
 
